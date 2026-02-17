@@ -3,14 +3,17 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Models\Agency;
 use App\Models\Client;
 use App\Models\EmployeeRequest;
 use App\Models\Invoice;
 use App\Models\Order;
+use App\Models\OrderStatus;
 use App\Models\OrderItem;
 use App\Models\Service;
 use App\Models\User;
 use App\Models\UserNotification;
+use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -105,7 +108,8 @@ class EmployeeUiController extends Controller
 
         return view('employee.orders', [
             'orders' => $orders->latest()->get(),
-            'services' => Service::where('agency_id', Auth::user()->agency_id)->orderBy('name')->get(),
+            'services' => Service::where('agency_id', Auth::user()->agency_id)->where('is_active', true)->orderBy('name')->get(),
+            'orderStatuses' => OrderStatus::orderBy('sort_order')->get(),
             'filters' => [
                 'status' => $status,
                 'arrival_date' => $arriveDate,
@@ -136,29 +140,6 @@ class EmployeeUiController extends Controller
         return view('employee.invoice-show', ['invoice' => $invoice]);
     }
 
-
-    public function updateInvoice(Request $request, Invoice $invoice)
-    {
-        abort_unless($invoice->pressing_id === Auth::user()->pressing_id, 403);
-
-        $data = $request->validate([
-            'amount' => ['required', 'numeric', 'min:0'],
-        ]);
-
-        $invoice->update(['amount' => $data['amount']]);
-
-        $owner = User::where('pressing_id', Auth::user()->pressing_id)->where('role', User::ROLE_OWNER)->first();
-        if ($owner) {
-            UserNotification::create([
-                'user_id' => $owner->id,
-                'type' => 'invoice_updated',
-                'title' => 'Facture modifiée',
-                'message' => Auth::user()->name.' a modifié la facture '.$invoice->invoice_number,
-            ]);
-        }
-
-        return redirect()->route('employee.ui.invoices')->with('success', 'Facture modifiée.');
-    }
 
     public function destroyInvoice(Invoice $invoice)
     {
@@ -240,74 +221,16 @@ class EmployeeUiController extends Controller
 
     public function storeOrder(Request $request)
     {
-        $data = $request->validate([
-            'client_name' => ['required', 'string', 'max:255'],
-            'client_phone' => ['nullable', 'string', 'max:50'],
-            'client_email' => ['nullable', 'email'],
-            'items' => ['required', 'array', 'min:1'],
-            'items.*.service_id' => ['required', 'exists:services,id'],
-            'items.*.quantity' => ['required', 'integer', 'min:1'],
-            'paid_advance' => ['nullable', 'boolean'],
-            'advance_amount' => ['nullable', 'numeric', 'min:0'],
-            'payment_method' => ['nullable', 'in:cash,wave,orange_money,card'],
-            'is_delivery' => ['nullable', 'boolean'],
-            'delivery_address' => ['nullable', 'string', 'max:255'],
-            'delivery_fee' => ['nullable', 'numeric', 'min:0'],
-        ]);
-
         abort_unless(Auth::user()->is_active, 403);
-        $agencyId = Auth::user()->agency_id;
+        $data = $this->validateOrderPayload($request);
 
-        DB::transaction(function () use ($data, $agencyId) {
-            $client = Client::create([
-                'agency_id' => $agencyId,
-                'name' => $data['client_name'],
-                'phone' => $data['client_phone'] ?? null,
-                'email' => $data['client_email'] ?? null,
-            ]);
+        $agency = Agency::where('id', Auth::user()->agency_id)
+            ->where('pressing_id', Auth::user()->pressing_id)
+            ->where('is_active', true)
+            ->firstOrFail();
 
-            $total = 0;
-            $preparedItems = [];
-            foreach ($data['items'] as $item) {
-                $service = Service::where('id', $item['service_id'])
-                    ->where('agency_id', $agencyId)
-                    ->firstOrFail();
-
-                $lineTotal = $service->price * $item['quantity'];
-                $total += $lineTotal;
-
-                $preparedItems[] = [
-                    'service_id' => $service->id,
-                    'quantity' => $item['quantity'],
-                    'unit_price' => $service->price,
-                    'line_total' => $lineTotal,
-                ];
-            }
-
-            $isDelivery = (bool) ($data['is_delivery'] ?? false);
-            $deliveryFee = $isDelivery ? (float) ($data['delivery_fee'] ?? 0) : 0;
-            $total += $deliveryFee;
-
-            $advanceAmount = min((float) ($data['advance_amount'] ?? 0), $total);
-
-            $order = Order::create([
-                'agency_id' => $agencyId,
-                'client_id' => $client->id,
-                'employee_id' => Auth::id(),
-                'reference' => 'CMD-'.strtoupper(uniqid()),
-                'status' => 'created',
-                'paid_advance' => (bool) ($data['paid_advance'] ?? false),
-                'advance_amount' => $advanceAmount,
-                'payment_method' => $data['payment_method'] ?? null,
-                'is_delivery' => $isDelivery,
-                'delivery_address' => $isDelivery ? ($data['delivery_address'] ?? null) : null,
-                'delivery_fee' => $deliveryFee,
-                'total' => $total,
-            ]);
-
-            foreach ($preparedItems as $item) {
-                OrderItem::create($item + ['order_id' => $order->id]);
-            }
+        DB::transaction(function () use ($data, $agency) {
+            [$order, $total] = $this->persistOrderFromPayload($data, $agency, null);
 
             Invoice::create([
                 'order_id' => $order->id,
@@ -316,9 +239,59 @@ class EmployeeUiController extends Controller
                 'amount' => $total,
                 'issued_at' => now()->toDateString(),
             ]);
+
+            if ((float) $order->advance_amount > 0) {
+                Transaction::create([
+                    'pressing_id' => Auth::user()->pressing_id,
+                    'agency_id' => $order->agency_id,
+                    'user_id' => Auth::id(),
+                    'order_id' => $order->id,
+                    'type' => 'encaissement',
+                    'amount' => $order->advance_amount,
+                    'payment_method' => $order->payment_method,
+                    'label' => 'Acompte commande '.$order->reference,
+                    'happened_at' => now(),
+                ]);
+            }
         });
 
         return redirect()->route('employee.ui.orders')->with('success', 'Commande enregistrée par employé.');
+    }
+
+    public function editOrder(Order $order)
+    {
+        abort_unless(Auth::user()->is_active, 403);
+        abort_unless($order->agency_id === Auth::user()->agency_id, 403);
+        $order->load(['items.service', 'client']);
+
+        return view('employee.order-edit', [
+            'order' => $order,
+            'services' => Service::where('agency_id', Auth::user()->agency_id)->where('is_active', true)->orderBy('name')->get(),
+            'orderStatuses' => OrderStatus::orderBy('sort_order')->get(),
+        ]);
+    }
+
+    public function updateOrder(Request $request, Order $order)
+    {
+        abort_unless(Auth::user()->is_active, 403);
+        abort_unless($order->agency_id === Auth::user()->agency_id, 403);
+
+        $data = $this->validateOrderPayload($request);
+        $agency = Agency::where('id', Auth::user()->agency_id)
+            ->where('pressing_id', Auth::user()->pressing_id)
+            ->where('is_active', true)
+            ->firstOrFail();
+
+        DB::transaction(function () use ($data, $agency, $order) {
+            $order->items()->delete();
+            [$updated, $total] = $this->persistOrderFromPayload($data, $agency, $order);
+
+            if ($updated->invoice) {
+                $updated->invoice->update(['amount' => $total]);
+            }
+        });
+
+        return redirect()->route('employee.ui.orders')->with('success', 'Commande modifiée.');
     }
 
     public function addPayment(Request $request, Order $order)
@@ -344,16 +317,35 @@ class EmployeeUiController extends Controller
         }
         $order->save();
 
+        Transaction::create([
+            'pressing_id' => Auth::user()->pressing_id,
+            'agency_id' => $order->agency_id,
+            'user_id' => Auth::id(),
+            'order_id' => $order->id,
+            'type' => 'encaissement',
+            'amount' => $amount,
+            'payment_method' => $data['payment_method'] ?? $order->payment_method,
+            'label' => 'Paiement commande '.$order->reference,
+            'happened_at' => now(),
+        ]);
+
         return redirect()->route('employee.ui.orders')->with('success', 'Paiement ajouté avec succès.');
+    }
+
+    public function transactions()
+    {
+        return view('employee.transactions', [
+            'transactions' => Transaction::where('agency_id', Auth::user()->agency_id)
+                ->with(['user', 'order', 'expense'])
+                ->latest('happened_at')
+                ->latest()
+                ->get(),
+        ]);
     }
 
     public function markReady(Order $order)
     {
         abort_unless($order->agency_id === Auth::user()->agency_id, 403);
-
-        if ((float) $order->advance_amount < (float) $order->total) {
-            return redirect()->route('employee.ui.orders')->with('error', 'Commande non totalement payée.');
-        }
 
         $order->update(['status' => 'ready', 'ready_at' => now()]);
 
@@ -372,4 +364,104 @@ class EmployeeUiController extends Controller
 
         return redirect()->route('employee.ui.orders')->with('success', 'Commande marquée retirée.');
     }
+
+    private function validateOrderPayload(Request $request): array
+    {
+        return $request->validate([
+            'client_name' => ['required', 'string', 'max:255'],
+            'client_phone' => ['nullable', 'string', 'max:50'],
+            'client_email' => ['nullable', 'email'],
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.service_id' => ['required', 'exists:services,id'],
+            'items.*.quantity' => ['required', 'integer', 'min:1'],
+            'paid_advance' => ['nullable', 'boolean'],
+            'advance_amount' => ['nullable', 'numeric', 'min:0'],
+            'payment_method' => ['nullable', 'in:cash,wave,orange_money,card'],
+            'status' => ['nullable', 'in:pending,ready,picked_up'],
+            'is_delivery' => ['nullable', 'boolean'],
+            'delivery_address' => ['nullable', 'string', 'max:255'],
+            'delivery_fee' => ['nullable', 'numeric', 'min:0'],
+            'discount_amount' => ['nullable', 'numeric', 'min:0'],
+        ]);
+    }
+
+    private function persistOrderFromPayload(array $data, Agency $agency, ?Order $existing): array
+    {
+        $client = $existing?->client;
+        if (! $client) {
+            $client = Client::create([
+                'agency_id' => $agency->id,
+                'name' => $data['client_name'],
+                'phone' => $data['client_phone'] ?? null,
+                'email' => $data['client_email'] ?? null,
+            ]);
+        } else {
+            $client->update([
+                'agency_id' => $agency->id,
+                'name' => $data['client_name'],
+                'phone' => $data['client_phone'] ?? null,
+                'email' => $data['client_email'] ?? null,
+            ]);
+        }
+
+        $total = 0;
+        $preparedItems = [];
+        foreach ($data['items'] as $item) {
+            $service = Service::where('id', $item['service_id'])
+                ->where('agency_id', $agency->id)
+                ->where('is_active', true)
+                ->firstOrFail();
+
+            $lineTotal = $service->price * $item['quantity'];
+            $total += $lineTotal;
+
+            $preparedItems[] = [
+                'service_id' => $service->id,
+                'quantity' => $item['quantity'],
+                'unit_price' => $service->price,
+                'line_total' => $lineTotal,
+            ];
+        }
+
+        $deliveryFee = (float) ($data['delivery_fee'] ?? 0);
+        $isDelivery = (bool) ($data['is_delivery'] ?? false);
+        if ($isDelivery) {
+            $total += $deliveryFee;
+        } else {
+            $deliveryFee = 0;
+        }
+
+        $discountAmount = min((float) ($data['discount_amount'] ?? 0), $total);
+        $total -= $discountAmount;
+
+        $advanceAmount = min((float) ($data['advance_amount'] ?? 0), $total);
+
+        $order = $existing ?? new Order();
+        if (! $existing) {
+            $order->reference = 'CMD-'.strtoupper(uniqid());
+            $order->employee_id = Auth::id();
+        }
+
+        $order->fill([
+            'agency_id' => $agency->id,
+            'client_id' => $client->id,
+            'status' => $data['status'] ?? ($existing?->status ?? 'pending'),
+            'paid_advance' => (bool) ($data['paid_advance'] ?? false),
+            'advance_amount' => $advanceAmount,
+            'payment_method' => $data['payment_method'] ?? null,
+            'is_delivery' => $isDelivery,
+            'delivery_address' => $isDelivery ? ($data['delivery_address'] ?? null) : null,
+            'delivery_fee' => $deliveryFee,
+            'discount_amount' => $discountAmount,
+            'total' => $total,
+        ]);
+        $order->save();
+
+        foreach ($preparedItems as $item) {
+            OrderItem::create($item + ['order_id' => $order->id]);
+        }
+
+        return [$order, $total];
+    }
+
 }
