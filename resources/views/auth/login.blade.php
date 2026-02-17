@@ -37,5 +37,28 @@
         </div>
     </div>
 </div>
+<script>
+function attachPasswordToggles(root=document){
+    root.querySelectorAll('input[type="password"]').forEach((input)=>{
+        if(input.dataset.toggleReady==='1') return;
+        input.dataset.toggleReady='1';
+        const group=document.createElement('div');
+        group.className='input-group';
+        input.parentNode.insertBefore(group,input);
+        group.appendChild(input);
+        const btn=document.createElement('button');
+        btn.type='button';
+        btn.className='btn btn-outline-secondary';
+        btn.textContent='Afficher';
+        btn.addEventListener('click',()=>{
+            const isPwd=input.type==='password';
+            input.type=isPwd?'text':'password';
+            btn.textContent=isPwd?'Cacher':'Afficher';
+        });
+        group.appendChild(btn);
+    });
+}
+attachPasswordToggles();
+</script>
 </body>
 </html>

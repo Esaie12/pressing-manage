@@ -160,6 +160,29 @@
 <script>
 window.initSelect2 = function(elements){ const $els=$(elements || '.js-select2'); $els.each(function(){ if(!$(this).hasClass('select2-hidden-accessible')) $(this).select2({theme:'bootstrap-5',width:'100%'}); }); }
 
+
+function attachPasswordToggles(root=document){
+    root.querySelectorAll('input[type="password"]').forEach((input)=>{
+        if(input.dataset.toggleReady==='1') return;
+        input.dataset.toggleReady='1';
+        const group=document.createElement('div');
+        group.className='input-group';
+        input.parentNode.insertBefore(group,input);
+        group.appendChild(input);
+        const btn=document.createElement('button');
+        btn.type='button';
+        btn.className='btn btn-outline-secondary';
+        btn.textContent='Afficher';
+        btn.addEventListener('click',()=>{
+            const isPwd=input.type==='password';
+            input.type=isPwd?'text':'password';
+            btn.textContent=isPwd?'Cacher':'Afficher';
+        });
+        group.appendChild(btn);
+    });
+}
+attachPasswordToggles();
+
 document.querySelectorAll('.js-toast').forEach((el)=>{ new bootstrap.Toast(el,{delay:3500}).show(); });
 $(function(){ $('.datatable').DataTable({ pageLength:10, language:{ search:'Recherche:', lengthMenu:'Afficher _MENU_ lignes', info:'Affichage _START_ à _END_ sur _TOTAL_', paginate:{ previous:'Préc', next:'Suiv' }, emptyTable:'Aucune donnée disponible' } }); window.initSelect2(); });
 </script>

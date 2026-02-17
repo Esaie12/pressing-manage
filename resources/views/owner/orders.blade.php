@@ -2,6 +2,7 @@
 @section('title','Owner - Commandes')
 @section('heading','Owner • Commandes')
 @section('content')
+@php($statusMap = $orderStatuses->keyBy('code'))
 <div class="row g-4">
   <div class="col-12">
     <div class="card shadow-sm">
@@ -9,7 +10,7 @@
         <form method="GET" action="{{ route('owner.ui.orders') }}" class="row g-2 align-items-end">
           <div class="col-md-3"><label class="form-label">Date arrivée</label><input type="date" class="form-control" name="arrival_date" value="{{ $filters['arrival_date'] ?? '' }}"></div>
           <div class="col-md-3"><label class="form-label">Date retrait</label><input type="date" class="form-control" name="pickup_date" value="{{ $filters['pickup_date'] ?? '' }}"></div>
-          <div class="col-md-2"><label class="form-label">Statut</label><select class="form-select" name="status"><option value="">Tous</option><option value="created" @selected(($filters['status'] ?? '')==='created')>Créée</option><option value="ready" @selected(($filters['status'] ?? '')==='ready')>Prête</option><option value="picked_up" @selected(($filters['status'] ?? '')==='picked_up')>Retirée</option></select></div>
+          <div class="col-md-2"><label class="form-label">Statut</label><select class="form-select" name="status"><option value="">Tous</option>@foreach($orderStatuses as $status)<option value="{{ $status->code }}" @selected(($filters['status'] ?? '')===$status->code)>{{ $status->label }}</option>@endforeach</select></div>
           <div class="col-md-2"><div class="form-check mt-4"><input class="form-check-input" type="checkbox" name="show_deleted" value="1" id="show_deleted" @checked($filters['show_deleted'] ?? false)><label class="form-check-label" for="show_deleted">Inclure supprimées</label></div></div>
           <div class="col-md-2 d-flex gap-2"><button class="btn btn-primary">Filtrer</button><a class="btn btn-outline-secondary" href="{{ route('owner.ui.orders') }}">Reset</a></div>
         </form>
@@ -35,6 +36,8 @@
 
           <div class="small text-muted">Total estimé: <strong id="totalAmount">0</strong> FCFA</div>
 
+          <div><label class="form-label">Statut</label><select class="form-select" name="status">@foreach($orderStatuses as $status)<option value="{{ $status->code }}" @selected($status->code==='pending')>{{ $status->label }}</option>@endforeach</select></div>
+
           <div class="form-check"><input class="form-check-input" type="checkbox" name="is_delivery" id="is_delivery" value="1"><label class="form-check-label" for="is_delivery">Livraison</label></div>
           <div id="deliveryFields" class="vstack gap-2 d-none">
             <input class="form-control" name="delivery_address" id="delivery_address" placeholder="Adresse de livraison">
@@ -58,7 +61,7 @@
   </div>
 
   <div class="col-lg-7">
-    <div class="card"><div class="card-header">Liste des commandes</div><div class="table-responsive"><table class="table mb-0 datatable"><thead><tr><th>Référence</th><th>Client</th><th>Total</th><th>Livraison</th><th>Avance</th><th>Reste</th><th>Statut</th><th>Actions</th></tr></thead><tbody>@forelse($orders as $order)@php $remaining=max(0,(float)$order->total-(float)$order->advance_amount); @endphp<tr><td>{{ $order->reference }}</td><td>{{ $order->client?->name ?? '-' }}</td><td>{{ number_format($order->total,0,',',' ') }} FCFA</td><td>{!! $order->is_delivery ? 'Oui ('.number_format($order->delivery_fee,0,',',' ').')' : 'Non' !!}</td><td>{{ number_format($order->advance_amount ?? 0,0,',',' ') }} FCFA</td><td>{{ number_format($remaining,0,',',' ') }} FCFA</td><td>{{ $order->status }} @if($order->deleted_at)<span class='badge bg-danger'>Supprimée</span>@endif</td><td class="d-flex gap-1"><a class="btn btn-sm btn-outline-primary" href="{{ route('owner.ui.orders.edit', $order) }}">Modifier</a><form method="POST" action="{{ route('owner.ui.orders.delete', $order) }}">@csrf<button class="btn btn-sm btn-outline-danger" type="submit">Supprimer</button></form>@if($order->invoice)<a class="btn btn-sm btn-outline-secondary" href="{{ route('owner.ui.invoices.show', $order->invoice) }}">Facture</a>@endif</td></tr>@empty<tr><td colspan="8" class="text-center text-muted">Aucune commande</td></tr>@endforelse</tbody></table></div></div>
+    <div class="card"><div class="card-header">Liste des commandes</div><div class="table-responsive"><table class="table mb-0 datatable"><thead><tr><th>Référence</th><th>Client</th><th>Total</th><th>Livraison</th><th>Avance</th><th>Reste</th><th>Statut</th><th>Actions</th></tr></thead><tbody>@forelse($orders as $order)@php $remaining=max(0,(float)$order->total-(float)$order->advance_amount); @endphp<tr><td>{{ $order->reference }}</td><td>{{ $order->client?->name ?? '-' }}</td><td>{{ number_format($order->total,0,',',' ') }} FCFA</td><td>{!! $order->is_delivery ? 'Oui ('.number_format($order->delivery_fee,0,',',' ').')' : 'Non' !!}</td><td>{{ number_format($order->advance_amount ?? 0,0,',',' ') }} FCFA</td><td>{{ number_format($remaining,0,',',' ') }} FCFA</td><td>@php($status = $statusMap[$order->status] ?? null)<span class="badge bg-{{ $status->badge_class ?? 'secondary' }}{{ ($status?->badge_class === 'warning') ? ' text-dark' : '' }}">{{ $status->label ?? $order->status }}</span> @if($order->deleted_at)<span class='badge bg-danger'>Supprimée</span>@endif</td><td class="d-flex gap-1"><a class="btn btn-sm btn-outline-primary" href="{{ route('owner.ui.orders.edit', $order) }}">Modifier</a><form method="POST" action="{{ route('owner.ui.orders.delete', $order) }}">@csrf<button class="btn btn-sm btn-outline-danger" type="submit">Supprimer</button></form>@if($order->invoice)<a class="btn btn-sm btn-outline-secondary" href="{{ route('owner.ui.invoices.show', $order->invoice) }}">Facture</a>@endif</td></tr>@empty<tr><td colspan="8" class="text-center text-muted">Aucune commande</td></tr>@endforelse</tbody></table></div></div>
   </div>
 </div>
 

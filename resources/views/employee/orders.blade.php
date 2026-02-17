@@ -2,10 +2,13 @@
 @section('title','Employé - Commandes')
 @section('heading','Employé • Commandes')
 @section('content')
+@php
+  $statusMap = $orderStatuses->keyBy('code');
+@endphp
 <div class="row g-3 mb-3">
   <div class="col-md-3"><input form="filterForm" class="form-control" type="date" name="arrival_date" value="{{ $filters['arrival_date'] ?? '' }}" placeholder="Date arrivée"></div>
   <div class="col-md-3"><input form="filterForm" class="form-control" type="date" name="pickup_date" value="{{ $filters['pickup_date'] ?? '' }}" placeholder="Date retrait"></div>
-  <div class="col-md-3"><select form="filterForm" class="form-select" name="status"><option value="">-- Statut --</option><option value="created" @selected(($filters['status'] ?? '')==='created')>created</option><option value="ready" @selected(($filters['status'] ?? '')==='ready')>ready</option><option value="picked_up" @selected(($filters['status'] ?? '')==='picked_up')>picked_up</option></select></div>
+  <div class="col-md-3"><select form="filterForm" class="form-select" name="status"><option value="">-- Statut --</option>@foreach($orderStatuses as $status)<option value="{{ $status->code }}" @selected(($filters['status'] ?? '')===$status->code)>{{ $status->label }}</option>@endforeach</select></div>
   <div class="col-md-3"><form id="filterForm" method="GET"><button class="btn btn-outline-primary w-100">Filtrer</button></form></div>
 </div>
 
@@ -55,7 +58,7 @@
         <table class="table mb-0 datatable align-middle">
           <thead><tr><th>Référence</th><th>Client</th><th>Total</th><th>Livraison</th><th>Payé</th><th>Reste</th><th>Statut</th><th>Actions</th></tr></thead>
           <tbody>
-            @forelse($orders as $order)
+            @foreach($orders as $order)
               @php $remaining=max(0,(float)$order->total-(float)$order->advance_amount); @endphp
               <tr>
                 <td>{{ $order->reference }}</td>
@@ -64,7 +67,7 @@
                 <td>{!! $order->is_delivery ? 'Oui ('.number_format($order->delivery_fee,0,',',' ').')' : 'Non' !!}</td>
                 <td>{{ number_format($order->advance_amount ?? 0,0,',',' ') }} FCFA</td>
                 <td>{{ number_format($remaining,0,',',' ') }} FCFA</td>
-                <td>{{ $order->status }}</td>
+                <td>@php($status = $statusMap[$order->status] ?? null)<span class="badge bg-{{ $status->badge_class ?? 'secondary' }}{{ ($status?->badge_class === 'warning') ? ' text-dark' : '' }}">{{ $status->label ?? $order->status }}</span></td>
                 <td class="d-flex gap-1 flex-wrap">
                   @if($remaining>0)
                     <button class="btn btn-sm btn-outline-warning" data-bs-toggle="collapse" data-bs-target="#pay{{ $order->id }}">Paiement</button>
@@ -86,9 +89,7 @@
                   </td>
                 </tr>
               @endif
-            @empty
-              <tr><td colspan="8" class="text-center text-muted">Aucune commande</td></tr>
-            @endforelse
+            @endforeach
           </tbody>
         </table>
       </div>
@@ -105,9 +106,7 @@
           <form method="POST" action="{{ route('employee.ui.orders.update', $order) }}" class="vstack gap-2">
             @csrf
             <select class="form-select" name="status" required>
-              <option value="created" @selected($order->status==='created')>created</option>
-              <option value="ready" @selected($order->status==='ready')>ready</option>
-              <option value="picked_up" @selected($order->status==='picked_up')>picked_up</option>
+              @foreach($orderStatuses as $status)<option value="{{ $status->code }}" @selected($order->status===$status->code)>{{ $status->label }}</option>@endforeach
             </select>
             <button class="btn btn-primary">Enregistrer</button>
           </form>

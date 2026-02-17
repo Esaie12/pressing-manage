@@ -10,6 +10,7 @@ use App\Models\EmployeeRequest;
 use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\Order;
+use App\Models\OrderStatus;
 use App\Models\OrderItem;
 use App\Models\OwnerSubscription;
 use App\Models\Pressing;
@@ -25,10 +26,15 @@ use Illuminate\Support\Facades\Hash;
 
 class OwnerUiController extends Controller
 {
-    public function dashboard()
+    public function dashboard(Request $request)
     {
         $user = Auth::user();
+        $selectedAgencyId = $request->query('agency_id');
+
         $orders = Order::whereHas('agency', fn ($q) => $q->where('pressing_id', $user->pressing_id));
+        if ($selectedAgencyId) {
+            $orders->where('agency_id', $selectedAgencyId);
+        }
 
         $pressing = Pressing::find($user->pressing_id);
         $greeting = now()->hour >= 12 ? 'Bonsoir' : 'Bonjour';
@@ -40,13 +46,18 @@ class OwnerUiController extends Controller
             }
         }
 
+        $todayCash = (clone $orders)->whereDate('created_at', now()->toDateString())->sum('advance_amount');
+
         return view('owner.dashboard', [
             'agenciesCount' => Agency::where('pressing_id', $user->pressing_id)->count(),
             'employeesCount' => User::where('pressing_id', $user->pressing_id)->where('role', User::ROLE_EMPLOYEE)->count(),
             'ordersCount' => (clone $orders)->count(),
+            'todayCash' => $todayCash,
             'revenue' => (clone $orders)->sum('total'),
             'greeting' => $greeting,
             'closingAlert' => $closingAlert,
+            'agencies' => Agency::where('pressing_id', $user->pressing_id)->orderBy('name')->get(),
+            'selectedAgencyId' => $selectedAgencyId,
         ]);
     }
 
@@ -255,6 +266,7 @@ class OwnerUiController extends Controller
             'orders' => $ordersQuery->latest()->get(),
             'agencies' => Agency::where('pressing_id', Auth::user()->pressing_id)->where('is_active', true)->orderBy('name')->get(),
             'services' => Service::whereHas('agency', fn ($q) => $q->where('pressing_id', Auth::user()->pressing_id))->where('is_active', true)->orderBy('name')->get(),
+            'orderStatuses' => OrderStatus::orderBy('sort_order')->get(),
             'filters' => [
                 'status' => $status,
                 'arrival_date' => $arriveDate,
@@ -489,7 +501,7 @@ class OwnerUiController extends Controller
         }
 
         $statusDistribution = [
-            'created' => (clone $query)->where('status', 'created')->count(),
+            'pending' => (clone $query)->where('status', 'pending')->count(),
             'ready' => (clone $query)->where('status', 'ready')->count(),
             'picked_up' => (clone $query)->whereNotNull('picked_up_at')->count(),
         ];
@@ -628,7 +640,7 @@ class OwnerUiController extends Controller
             'paid_advance' => ['nullable', 'boolean'],
             'advance_amount' => ['nullable', 'numeric', 'min:0'],
             'payment_method' => ['nullable', 'in:cash,wave,orange_money,card'],
-            'status' => ['nullable', 'string', 'max:50'],
+            'status' => ['nullable', 'in:pending,ready,picked_up'],
             'is_delivery' => ['nullable', 'boolean'],
             'delivery_address' => ['nullable', 'string', 'max:255'],
             'delivery_fee' => ['nullable', 'numeric', 'min:0'],
@@ -704,7 +716,7 @@ class OwnerUiController extends Controller
         $order->fill([
             'agency_id' => $agency->id,
             'client_id' => $client->id,
-            'status' => $data['status'] ?? ($existing?->status ?? 'created'),
+            'status' => $data['status'] ?? ($existing?->status ?? 'pending'),
             'paid_advance' => (bool) ($data['paid_advance'] ?? false),
             'advance_amount' => $advanceAmount,
             'payment_method' => $data['payment_method'] ?? null,

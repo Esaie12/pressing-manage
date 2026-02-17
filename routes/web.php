@@ -128,6 +128,5 @@ Route::middleware(['auth', RoleMiddleware::class.':employee'])->prefix('employee
 
     Route::get('/ui/invoices', [EmployeeUiController::class, 'invoices'])->name('employee.ui.invoices');
     Route::get('/ui/invoices/{invoice}', [EmployeeUiController::class, 'showInvoice'])->name('employee.ui.invoices.show');
-    Route::post('/ui/invoices/{invoice}', [EmployeeUiController::class, 'updateInvoice'])->name('employee.ui.invoices.update');
     Route::post('/ui/invoices/{invoice}/delete', [EmployeeUiController::class, 'destroyInvoice'])->name('employee.ui.invoices.delete');
 });

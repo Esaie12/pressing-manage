@@ -7,6 +7,7 @@ use App\Models\Client;
 use App\Models\EmployeeRequest;
 use App\Models\Invoice;
 use App\Models\Order;
+use App\Models\OrderStatus;
 use App\Models\OrderItem;
 use App\Models\Service;
 use App\Models\User;
@@ -106,6 +107,7 @@ class EmployeeUiController extends Controller
         return view('employee.orders', [
             'orders' => $orders->latest()->get(),
             'services' => Service::where('agency_id', Auth::user()->agency_id)->where('is_active', true)->orderBy('name')->get(),
+            'orderStatuses' => OrderStatus::orderBy('sort_order')->get(),
             'filters' => [
                 'status' => $status,
                 'arrival_date' => $arriveDate,
@@ -136,29 +138,6 @@ class EmployeeUiController extends Controller
         return view('employee.invoice-show', ['invoice' => $invoice]);
     }
 
-
-    public function updateInvoice(Request $request, Invoice $invoice)
-    {
-        abort_unless($invoice->pressing_id === Auth::user()->pressing_id, 403);
-
-        $data = $request->validate([
-            'amount' => ['required', 'numeric', 'min:0'],
-        ]);
-
-        $invoice->update(['amount' => $data['amount']]);
-
-        $owner = User::where('pressing_id', Auth::user()->pressing_id)->where('role', User::ROLE_OWNER)->first();
-        if ($owner) {
-            UserNotification::create([
-                'user_id' => $owner->id,
-                'type' => 'invoice_updated',
-                'title' => 'Facture modifiée',
-                'message' => Auth::user()->name.' a modifié la facture '.$invoice->invoice_number,
-            ]);
-        }
-
-        return redirect()->route('employee.ui.invoices')->with('success', 'Facture modifiée.');
-    }
 
     public function destroyInvoice(Invoice $invoice)
     {
@@ -296,7 +275,7 @@ class EmployeeUiController extends Controller
                 'client_id' => $client->id,
                 'employee_id' => Auth::id(),
                 'reference' => 'CMD-'.strtoupper(uniqid()),
-                'status' => 'created',
+                'status' => 'pending',
                 'paid_advance' => (bool) ($data['paid_advance'] ?? false),
                 'advance_amount' => $advanceAmount,
                 'payment_method' => $data['payment_method'] ?? null,
@@ -328,7 +307,7 @@ class EmployeeUiController extends Controller
         abort_unless($order->agency_id === Auth::user()->agency_id, 403);
 
         $data = $request->validate([
-            'status' => ['required', 'string', 'max:50'],
+            'status' => ['required', 'in:pending,ready,picked_up'],
         ]);
 
         $order->update(['status' => $data['status']]);
