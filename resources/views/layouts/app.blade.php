@@ -59,6 +59,7 @@
                             <li><a class="dropdown-item" href="{{ route('owner.ui.orders') }}">Commandes</a></li>
                             <li><a class="dropdown-item" href="{{ route('owner.ui.invoices') }}">Factures</a></li>
                             <li><a class="dropdown-item" href="{{ route('owner.ui.requests') }}">Demandes employés</a></li>
+                            <li><a class="dropdown-item" href="{{ route('owner.ui.transactions') }}">Transactions</a></li>
                         </ul>
                     </li>
                     <li class="nav-item dropdown">
@@ -84,6 +85,7 @@
                     <li class="nav-item"><a class="nav-link {{ request()->routeIs('employee.ui.orders*') ? 'active fw-semibold' : '' }}" href="{{ route('employee.ui.orders') }}">Mes commandes</a></li>
                     <li class="nav-item"><a class="nav-link {{ request()->routeIs('employee.ui.invoices*') ? 'active fw-semibold' : '' }}" href="{{ route('employee.ui.invoices') }}">Mes factures</a></li>
                     <li class="nav-item"><a class="nav-link {{ request()->routeIs('employee.ui.requests*') ? 'active fw-semibold' : '' }}" href="{{ route('employee.ui.requests') }}">Demandes</a></li>
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('employee.ui.transactions*') ? 'active fw-semibold' : '' }}" href="{{ route('employee.ui.transactions') }}">Transactions</a></li>
                 @endif
             </ul>
 

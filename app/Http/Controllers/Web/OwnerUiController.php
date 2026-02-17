@@ -16,6 +16,7 @@ use App\Models\OwnerSubscription;
 use App\Models\Pressing;
 use App\Models\Service;
 use App\Models\SubscriptionPlan;
+use App\Models\Transaction;
 use App\Models\User;
 use App\Models\UserNotification;
 use Carbon\Carbon;
@@ -295,6 +296,20 @@ class OwnerUiController extends Controller
                 'amount' => $total,
                 'issued_at' => now()->toDateString(),
             ]);
+
+            if ((float) $order->advance_amount > 0) {
+                Transaction::create([
+                    'pressing_id' => Auth::user()->pressing_id,
+                    'agency_id' => $order->agency_id,
+                    'user_id' => Auth::id(),
+                    'order_id' => $order->id,
+                    'type' => 'encaissement',
+                    'amount' => $order->advance_amount,
+                    'payment_method' => $order->payment_method,
+                    'label' => 'Acompte commande '.$order->reference,
+                    'happened_at' => now(),
+                ]);
+            }
         });
 
         return redirect()->route('owner.ui.orders')->with('success', 'Commande créée avec plusieurs items.');
@@ -351,6 +366,78 @@ class OwnerUiController extends Controller
         $order->delete();
 
         return redirect()->route('owner.ui.orders')->with('success', 'Commande supprimée (soft delete).');
+    }
+
+
+    public function addPayment(Request $request, Order $order)
+    {
+        $order->load('agency');
+        abort_unless($order->agency && $order->agency->pressing_id === Auth::user()->pressing_id, 403);
+
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'min:1'],
+            'payment_method' => ['nullable', 'in:cash,wave,orange_money,card'],
+        ]);
+
+        $remaining = max(0, (float) $order->total - (float) $order->advance_amount);
+        $amount = min($remaining, (float) $data['amount']);
+
+        if ($amount <= 0) {
+            return redirect()->route('owner.ui.orders')->with('error', 'Commande déjà totalement payée.');
+        }
+
+        $order->advance_amount = (float) $order->advance_amount + $amount;
+        $order->paid_advance = $order->advance_amount > 0;
+        if (! empty($data['payment_method'])) {
+            $order->payment_method = $data['payment_method'];
+        }
+        $order->save();
+
+        Transaction::create([
+            'pressing_id' => Auth::user()->pressing_id,
+            'agency_id' => $order->agency_id,
+            'user_id' => Auth::id(),
+            'order_id' => $order->id,
+            'type' => 'encaissement',
+            'amount' => $amount,
+            'payment_method' => $data['payment_method'] ?? $order->payment_method,
+            'label' => 'Paiement commande '.$order->reference,
+            'happened_at' => now(),
+        ]);
+
+        return redirect()->route('owner.ui.orders')->with('success', 'Paiement ajouté avec succès.');
+    }
+
+    public function applyDiscount(Request $request, Order $order)
+    {
+        $order->load('agency');
+        abort_unless($order->agency && $order->agency->pressing_id === Auth::user()->pressing_id, 403);
+
+        $data = $request->validate([
+            'discount_amount' => ['required', 'numeric', 'min:1'],
+        ]);
+
+        $discount = min((float) $data['discount_amount'], (float) $order->total);
+        $order->discount_amount = (float) $order->discount_amount + $discount;
+        $order->total = max(0, (float) $order->total - $discount);
+        $order->save();
+
+        if ($order->invoice) {
+            $order->invoice->update(['amount' => $order->total]);
+        }
+
+        return redirect()->route('owner.ui.orders')->with('success', 'Réduction appliquée.');
+    }
+
+    public function transactions()
+    {
+        return view('owner.transactions', [
+            'transactions' => Transaction::where('pressing_id', Auth::user()->pressing_id)
+                ->with(['agency', 'user', 'order', 'expense'])
+                ->latest('happened_at')
+                ->latest()
+                ->get(),
+        ]);
     }
 
     public function invoices()
@@ -556,11 +643,22 @@ class OwnerUiController extends Controller
             Agency::where('id', $agencyId)->where('pressing_id', Auth::user()->pressing_id)->firstOrFail();
         }
 
-        Expense::create([
+        $expense = Expense::create([
             ...$data,
             'pressing_id' => Auth::user()->pressing_id,
             'agency_id' => $agencyId,
             'category' => CategoryExpense::find($data['category_expense_id'])?->name,
+        ]);
+
+        Transaction::create([
+            'pressing_id' => Auth::user()->pressing_id,
+            'agency_id' => $agencyId,
+            'user_id' => Auth::id(),
+            'expense_id' => $expense->id,
+            'type' => 'paiement',
+            'amount' => $expense->amount,
+            'label' => 'Dépense: '.$expense->title,
+            'happened_at' => now(),
         ]);
 
         return redirect()->route('owner.ui.expenses')->with('success', 'Dépense ajoutée.');
