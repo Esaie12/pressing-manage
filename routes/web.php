@@ -83,11 +83,12 @@ Route::middleware(['auth', RoleMiddleware::class.':owner'])->prefix('owner')->gr
 
     Route::get('/ui/orders', [OwnerUiController::class, 'orders'])->name('owner.ui.orders');
     Route::post('/ui/orders/{order}/payments', [OwnerUiController::class, 'addPayment'])->name('owner.ui.orders.payments.store');
-    Route::post('/ui/orders/{order}/discount', [OwnerUiController::class, 'applyDiscount'])->name('owner.ui.orders.discount');
     Route::post('/ui/orders', [OwnerUiController::class, 'storeOrder'])->name('owner.ui.orders.store');
     Route::get('/ui/orders/{order}/edit', [OwnerUiController::class, 'editOrder'])->name('owner.ui.orders.edit');
     Route::post('/ui/orders/{order}', [OwnerUiController::class, 'updateOrder'])->name('owner.ui.orders.update');
     Route::post('/ui/orders/{order}/delete', [OwnerUiController::class, 'destroyOrder'])->name('owner.ui.orders.delete');
+    Route::post('/ui/orders/{order}/ready', [OwnerUiController::class, 'markReady'])->name('owner.ui.orders.ready');
+    Route::post('/ui/orders/{order}/picked-up', [OwnerUiController::class, 'markPickedUp'])->name('owner.ui.orders.picked');
 
     Route::get('/ui/invoices', [OwnerUiController::class, 'invoices'])->name('owner.ui.invoices');
     Route::get('/ui/transactions', [OwnerUiController::class, 'transactions'])->name('owner.ui.transactions');
@@ -129,7 +130,6 @@ Route::middleware(['auth', RoleMiddleware::class.':employee'])->prefix('employee
     Route::post('/ui/orders/{order}/ready', [EmployeeUiController::class, 'markReady'])->name('employee.ui.orders.ready');
     Route::post('/ui/orders/{order}/picked-up', [EmployeeUiController::class, 'markPickedUp'])->name('employee.ui.orders.picked');
     Route::post('/ui/orders/{order}/payments', [EmployeeUiController::class, 'addPayment'])->name('employee.ui.orders.payments.store');
-    Route::post('/ui/orders/{order}/discount', [EmployeeUiController::class, 'applyDiscount'])->name('employee.ui.orders.discount');
 
     Route::get('/ui/invoices', [EmployeeUiController::class, 'invoices'])->name('employee.ui.invoices');
     Route::get('/ui/transactions', [EmployeeUiController::class, 'transactions'])->name('employee.ui.transactions');

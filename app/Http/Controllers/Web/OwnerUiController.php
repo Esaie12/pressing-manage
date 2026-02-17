@@ -369,6 +369,30 @@ class OwnerUiController extends Controller
     }
 
 
+    public function markReady(Order $order)
+    {
+        $order->load('agency');
+        abort_unless($order->agency && $order->agency->pressing_id === Auth::user()->pressing_id, 403);
+
+        $order->update(['status' => 'ready', 'ready_at' => now()]);
+
+        return redirect()->route('owner.ui.orders')->with('success', 'Commande marquée prête.');
+    }
+
+    public function markPickedUp(Order $order)
+    {
+        $order->load('agency');
+        abort_unless($order->agency && $order->agency->pressing_id === Auth::user()->pressing_id, 403);
+
+        if ((float) $order->advance_amount < (float) $order->total) {
+            return redirect()->route('owner.ui.orders')->with('error', 'Commande non totalement payée.');
+        }
+
+        $order->update(['status' => 'picked_up', 'picked_up_at' => now()]);
+
+        return redirect()->route('owner.ui.orders')->with('success', 'Commande marquée retirée.');
+    }
+
     public function addPayment(Request $request, Order $order)
     {
         $order->load('agency');
@@ -406,27 +430,6 @@ class OwnerUiController extends Controller
         ]);
 
         return redirect()->route('owner.ui.orders')->with('success', 'Paiement ajouté avec succès.');
-    }
-
-    public function applyDiscount(Request $request, Order $order)
-    {
-        $order->load('agency');
-        abort_unless($order->agency && $order->agency->pressing_id === Auth::user()->pressing_id, 403);
-
-        $data = $request->validate([
-            'discount_amount' => ['required', 'numeric', 'min:1'],
-        ]);
-
-        $discount = min((float) $data['discount_amount'], (float) $order->total);
-        $order->discount_amount = (float) $order->discount_amount + $discount;
-        $order->total = max(0, (float) $order->total - $discount);
-        $order->save();
-
-        if ($order->invoice) {
-            $order->invoice->update(['amount' => $order->total]);
-        }
-
-        return redirect()->route('owner.ui.orders')->with('success', 'Réduction appliquée.');
     }
 
     public function transactions()
@@ -742,6 +745,7 @@ class OwnerUiController extends Controller
             'is_delivery' => ['nullable', 'boolean'],
             'delivery_address' => ['nullable', 'string', 'max:255'],
             'delivery_fee' => ['nullable', 'numeric', 'min:0'],
+            'discount_amount' => ['nullable', 'numeric', 'min:0'],
         ]);
     }
 
@@ -803,6 +807,9 @@ class OwnerUiController extends Controller
             $deliveryFee = 0;
         }
 
+        $discountAmount = min((float) ($data['discount_amount'] ?? 0), $total);
+        $total -= $discountAmount;
+
         $advanceAmount = min((float) ($data['advance_amount'] ?? 0), $total);
 
         $order = $existing ?? new Order();
@@ -821,6 +828,7 @@ class OwnerUiController extends Controller
             'is_delivery' => $isDelivery,
             'delivery_address' => $isDelivery ? ($data['delivery_address'] ?? null) : null,
             'delivery_fee' => $deliveryFee,
+            'discount_amount' => $discountAmount,
             'total' => $total,
         ]);
         $order->save();

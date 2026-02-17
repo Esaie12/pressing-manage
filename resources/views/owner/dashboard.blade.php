@@ -25,9 +25,9 @@
 </div>
 
 <div class="row g-3 mb-4">
-  <div class="col-6 col-lg-3"><div class="card stat-card shadow-sm"><div class="card-body"><div class="text-muted">Agences</div><div class="h2 mb-0">{{ $agenciesCount }}</div></div></div></div>
-  <div class="col-6 col-lg-3"><div class="card stat-card shadow-sm"><div class="card-body"><div class="text-muted">Employés</div><div class="h2 mb-0">{{ $employeesCount }}</div></div></div></div>
-  <div class="col-6 col-lg-3"><div class="card stat-card shadow-sm"><div class="card-body"><div class="text-muted">Commandes reçues</div><div class="h2 mb-0">{{ $ordersCount }}</div></div></div></div>
-  <div class="col-6 col-lg-3"><div class="card stat-card shadow-sm"><div class="card-body"><div class="text-muted">Caisse aujourd'hui</div><div class="h2 mb-0">{{ number_format($todayCash,0,',',' ') }} FCFA</div></div></div></div>
+  <div class="col-6 col-lg-3"><div class="card stat-card shadow-sm"><div class="card-body"><div class="text-muted">🏢 Agences</div><div class="h2 mb-0">{{ $agenciesCount }}</div></div></div></div>
+  <div class="col-6 col-lg-3"><div class="card stat-card shadow-sm"><div class="card-body"><div class="text-muted">👥 Employés</div><div class="h2 mb-0">{{ $employeesCount }}</div></div></div></div>
+  <div class="col-6 col-lg-3"><div class="card stat-card shadow-sm"><div class="card-body"><div class="text-muted">📦 Commandes reçues</div><div class="h2 mb-0">{{ $ordersCount }}</div></div></div></div>
+  <div class="col-6 col-lg-3"><div class="card stat-card shadow-sm"><div class="card-body"><div class="text-muted">💰 Caisse aujourd'hui</div><div class="h2 mb-0">{{ number_format($todayCash,0,',',' ') }} FCFA</div></div></div></div>
 </div>
 @endsection

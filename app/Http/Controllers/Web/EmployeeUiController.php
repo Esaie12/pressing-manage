@@ -332,26 +332,6 @@ class EmployeeUiController extends Controller
         return redirect()->route('employee.ui.orders')->with('success', 'Paiement ajouté avec succès.');
     }
 
-    public function applyDiscount(Request $request, Order $order)
-    {
-        abort_unless($order->agency_id === Auth::user()->agency_id, 403);
-
-        $data = $request->validate([
-            'discount_amount' => ['required', 'numeric', 'min:1'],
-        ]);
-
-        $discount = min((float) $data['discount_amount'], (float) $order->total);
-        $order->discount_amount = (float) $order->discount_amount + $discount;
-        $order->total = max(0, (float) $order->total - $discount);
-        $order->save();
-
-        if ($order->invoice) {
-            $order->invoice->update(['amount' => $order->total]);
-        }
-
-        return redirect()->route('employee.ui.orders')->with('success', 'Réduction appliquée.');
-    }
-
     public function transactions()
     {
         return view('employee.transactions', [
@@ -401,6 +381,7 @@ class EmployeeUiController extends Controller
             'is_delivery' => ['nullable', 'boolean'],
             'delivery_address' => ['nullable', 'string', 'max:255'],
             'delivery_fee' => ['nullable', 'numeric', 'min:0'],
+            'discount_amount' => ['nullable', 'numeric', 'min:0'],
         ]);
     }
 
@@ -450,7 +431,7 @@ class EmployeeUiController extends Controller
             $deliveryFee = 0;
         }
 
-        $discountAmount = min((float) ($existing?->discount_amount ?? 0), $total);
+        $discountAmount = min((float) ($data['discount_amount'] ?? 0), $total);
         $total -= $discountAmount;
 
         $advanceAmount = min((float) ($data['advance_amount'] ?? 0), $total);

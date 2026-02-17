@@ -29,6 +29,7 @@
           <input class="form-control" name="client_phone" placeholder="Téléphone client">
           <input class="form-control" type="email" name="client_email" placeholder="Email client">
           <select class="form-select" name="status">@foreach($orderStatuses as $status)<option value="{{ $status->code }}" @selected($status->code==='pending')>{{ $status->label }}</option>@endforeach</select>
+          <input class="form-control" type="number" min="0" step="0.01" name="discount_amount" placeholder="Réduction (optionnel)">
 
           <div class="border rounded p-2">
             <div class="d-flex justify-content-between align-items-center mb-2"><strong>Items</strong><button type="button" class="btn btn-sm btn-outline-primary" id="addItemBtn">+ Ajouter</button></div>
@@ -71,7 +72,7 @@
             <td class="d-flex gap-1 flex-wrap">
               <a class="btn btn-sm btn-outline-primary" href="{{ route('owner.ui.orders.edit', $order) }}">Modifier</a>
               <button class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#payModal{{ $order->id }}">Paiement</button>
-              <button class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#discountModal{{ $order->id }}">Réduction</button>
+              <form method="POST" action="{{ route('owner.ui.orders.ready', $order) }}">@csrf<button class="btn btn-sm btn-outline-primary">Prête</button></form><form method="POST" action="{{ route('owner.ui.orders.picked', $order) }}">@csrf<button class="btn btn-sm btn-outline-success">Retirée</button></form>
               <form method="POST" action="{{ route('owner.ui.orders.delete', $order) }}">@csrf<button class="btn btn-sm btn-outline-danger" type="submit">Supprimer</button></form>
             </td>
           </tr>
@@ -87,7 +88,6 @@
 @foreach($orders as $order)
 <div class="modal fade" id="payModal{{ $order->id }}" tabindex="-1" aria-hidden="true"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Paiement {{ $order->reference }}</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form method="POST" action="{{ route('owner.ui.orders.payments.store', $order) }}" class="vstack gap-2">@csrf<input class="form-control" type="number" min="1" step="0.01" name="amount" placeholder="Montant" required><select class="form-select" name="payment_method"><option value="">Moyen de paiement</option><option value="cash">Cash</option><option value="wave">Wave</option><option value="orange_money">Orange Money</option><option value="card">Carte</option></select><button class="btn btn-warning">Valider paiement</button></form></div></div></div></div>
 
-<div class="modal fade" id="discountModal{{ $order->id }}" tabindex="-1" aria-hidden="true"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Accorder réduction</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form method="POST" action="{{ route('owner.ui.orders.discount', $order) }}" class="vstack gap-2">@csrf<input class="form-control" type="number" min="1" step="0.01" name="discount_amount" placeholder="Montant réduction" required><button class="btn btn-info">Appliquer</button></form></div></div></div></div>
 @endforeach
 
 <template id="itemTemplate"><div class="row g-2 align-items-center order-item-row"><div class="col-7"><select class="form-select item-service js-select2" name="items[__INDEX__][service_id]" required><option value="">-- Service --</option>@foreach($services as $service)<option value="{{ $service->id }}" data-price="{{ $service->price }}">{{ $service->name }}</option>@endforeach</select></div><div class="col-3"><input class="form-control item-qty" type="number" min="1" name="items[__INDEX__][quantity]" value="1" required></div><div class="col-2 d-grid"><button type="button" class="btn btn-outline-danger remove-item">X</button></div></div></template>

@@ -11,6 +11,7 @@
       <input class="form-control" name="client_phone" value="{{ $order->client?->phone }}">
       <input class="form-control" type="email" name="client_email" value="{{ $order->client?->email }}">
       <select class="form-select" name="status">@foreach($orderStatuses as $status)<option value="{{ $status->code }}" @selected($status->code===$order->status)>{{ $status->label }}</option>@endforeach</select>
+      <input class="form-control" type="number" min="0" step="0.01" name="discount_amount" value="{{ $order->discount_amount ?? 0 }}" placeholder="Réduction">
 
       <div class="border rounded p-2">
         <div class="d-flex justify-content-between align-items-center mb-2"><strong>Items</strong><button type="button" class="btn btn-sm btn-outline-primary" id="editAddItem">+ Ajouter</button></div>
