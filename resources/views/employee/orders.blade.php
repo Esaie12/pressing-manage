@@ -2,7 +2,9 @@
 @section('title','Employé - Commandes')
 @section('heading','Employé • Commandes')
 @section('content')
-@php($statusMap = $orderStatuses->keyBy('code'))
+@php
+  $statusMap = $orderStatuses->keyBy('code');
+@endphp
 <div class="row g-3 mb-3">
   <div class="col-md-3"><input form="filterForm" class="form-control" type="date" name="arrival_date" value="{{ $filters['arrival_date'] ?? '' }}"></div>
   <div class="col-md-3"><input form="filterForm" class="form-control" type="date" name="pickup_date" value="{{ $filters['pickup_date'] ?? '' }}"></div>

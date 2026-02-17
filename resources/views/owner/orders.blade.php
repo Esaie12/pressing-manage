@@ -2,7 +2,9 @@
 @section('title','Owner - Commandes')
 @section('heading','Owner • Commandes')
 @section('content')
-@php($statusMap = $orderStatuses->keyBy('code'))
+@php
+  $statusMap = $orderStatuses->keyBy('code');
+@endphp
 <div class="row g-4">
   <div class="col-12">
     <div class="card shadow-sm"><div class="card-body">
