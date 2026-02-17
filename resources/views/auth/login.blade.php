@@ -16,11 +16,15 @@
                     <h1 class="h4 fw-bold mb-1">Connexion</h1>
                     <p class="text-muted small mb-4">Admin, propriétaire ou employé.</p>
 
+                    @if($errors->any())
+                        <div class="alert alert-danger py-2">Identifiants incorrects. Vérifiez votre email/mot de passe.</div>
+                    @endif
+
                     <form method="POST" action="/login" class="vstack gap-3">
                         @csrf
                         <div>
                             <label class="form-label">Email</label>
-                            <input class="form-control" type="email" name="email" required>
+                            <input class="form-control" type="email" name="email" value="{{ old('email') }}" required autofocus>
                         </div>
                         <div>
                             <label class="form-label">Mot de passe</label>

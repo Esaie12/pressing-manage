@@ -14,6 +14,13 @@
           <input class="form-control" name="phone" value="{{ old('phone', $user->phone) }}" placeholder="Téléphone">
           <input class="form-control" name="address" value="{{ old('address', $user->address) }}" placeholder="Adresse">
           <input class="form-control" type="file" name="photo" accept="image/*">
+          @if($user->photo_path)
+            <div>
+              <img src="{{ asset('storage/'.$user->photo_path) }}" alt="Photo de profil" style="width:80px;height:80px;object-fit:cover;border-radius:50%;">
+            </div>
+            <div class="form-check"><input class="form-check-input" type="checkbox" value="1" name="remove_photo" id="remove_photo"><label class="form-check-label" for="remove_photo">Supprimer la photo actuelle</label></div>
+          @endif
+
           <button class="btn btn-primary">Mettre à jour</button>
         </form>
       </div>

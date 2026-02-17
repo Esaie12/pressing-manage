@@ -23,9 +23,15 @@ class ProfileUiController extends Controller
             'phone' => ['nullable', 'string', 'max:50'],
             'address' => ['nullable', 'string', 'max:255'],
             'photo' => ['nullable', 'image', 'max:2048'],
+            'remove_photo' => ['nullable', 'boolean'],
         ]);
 
         $user = auth()->user();
+        if ((bool) ($data['remove_photo'] ?? false) && $user->photo_path) {
+            Storage::disk('public')->delete($user->photo_path);
+            $data['photo_path'] = null;
+        }
+
         if ($request->hasFile('photo')) {
             if ($user->photo_path) {
                 Storage::disk('public')->delete($user->photo_path);
@@ -33,7 +39,7 @@ class ProfileUiController extends Controller
             $data['photo_path'] = $request->file('photo')->store('profiles', 'public');
         }
 
-        unset($data['photo']);
+        unset($data['photo'], $data['remove_photo']);
 
         $user->update($data);
 

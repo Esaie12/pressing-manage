@@ -66,9 +66,9 @@
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ route('owner.ui.stats') }}">Statistiques</a></li>
                             <li><a class="dropdown-item" href="{{ route('owner.ui.expenses') }}">Dépenses</a></li>
-                            <li><a class="dropdown-item" href="{{ route('owner.ui.pricing') }}">Mon abonnement</a></li>
                         </ul>
                     </li>
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('owner.ui.pricing*') ? 'active fw-semibold' : '' }}" href="{{ route('owner.ui.pricing') }}">Abonnement</a></li>
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle {{ request()->routeIs('owner.ui.settings*','owner.ui.agencies*','owner.ui.employees*','owner.ui.services*') ? 'active fw-semibold' : '' }}" href="#" role="button" data-bs-toggle="dropdown">Paramètres</a>
                         <ul class="dropdown-menu">
@@ -95,13 +95,7 @@
                     @endif
                 </button>
 
-                <a href="{{ auth()->user()->photo_path ? url()->current() : route('profile.edit') }}" class="btn btn-outline-primary p-1">
-                    @if(auth()->user()->photo_path)
-                        <img src="{{ asset('storage/'.auth()->user()->photo_path) }}" alt="Profil" style="width:32px;height:32px;object-fit:cover;border-radius:50%;">
-                    @else
-                        Profil
-                    @endif
-                </a>
+                <a href="{{ route('profile.edit') }}" class="btn btn-outline-primary">Profil</a>
 
                 <form method="POST" action="/logout" class="d-flex">
                     @csrf
