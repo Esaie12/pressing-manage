@@ -1,0 +1,43 @@
+<?php
+
+namespace App\Http\Controllers\Web;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+
+class ProfileUiController extends Controller
+{
+    public function edit()
+    {
+        return view('profile.edit', ['user' => auth()->user()]);
+    }
+
+    public function update(Request $request)
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', 'unique:users,email,'.auth()->id()],
+        ]);
+
+        auth()->user()->update($data);
+
+        return back()->with('success', 'Profil mis à jour.');
+    }
+
+    public function updatePassword(Request $request)
+    {
+        $data = $request->validate([
+            'current_password' => ['required', 'string'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        if (! Hash::check($data['current_password'], auth()->user()->password)) {
+            return back()->with('error', 'Mot de passe actuel incorrect.');
+        }
+
+        auth()->user()->update(['password' => Hash::make($data['password'])]);
+
+        return back()->with('success', 'Mot de passe modifié.');
+    }
+}
