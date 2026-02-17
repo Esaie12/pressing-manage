@@ -12,6 +12,7 @@
         <div class="col-12 col-md-8 col-lg-5">
             <div class="card shadow-sm border-0 rounded-4">
                 <div class="card-body p-4 p-md-5">
+                    <div class="text-center mb-3"><img src="{{ asset('logo-pressing.svg') }}" alt="Logo" width="72" height="72"></div>
                     <h1 class="h4 fw-bold mb-1">Connexion</h1>
                     <p class="text-muted small mb-4">Admin, propriétaire ou employé.</p>
 

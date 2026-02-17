@@ -105,7 +105,7 @@ class EmployeeUiController extends Controller
 
         return view('employee.orders', [
             'orders' => $orders->latest()->get(),
-            'services' => Service::where('agency_id', Auth::user()->agency_id)->orderBy('name')->get(),
+            'services' => Service::where('agency_id', Auth::user()->agency_id)->where('is_active', true)->orderBy('name')->get(),
             'filters' => [
                 'status' => $status,
                 'arrival_date' => $arriveDate,
@@ -271,6 +271,7 @@ class EmployeeUiController extends Controller
             foreach ($data['items'] as $item) {
                 $service = Service::where('id', $item['service_id'])
                     ->where('agency_id', $agencyId)
+                    ->where('is_active', true)
                     ->firstOrFail();
 
                 $lineTotal = $service->price * $item['quantity'];
@@ -319,6 +320,20 @@ class EmployeeUiController extends Controller
         });
 
         return redirect()->route('employee.ui.orders')->with('success', 'Commande enregistrée par employé.');
+    }
+
+    public function updateOrder(Request $request, Order $order)
+    {
+        abort_unless(Auth::user()->is_active, 403);
+        abort_unless($order->agency_id === Auth::user()->agency_id, 403);
+
+        $data = $request->validate([
+            'status' => ['required', 'string', 'max:50'],
+        ]);
+
+        $order->update(['status' => $data['status']]);
+
+        return redirect()->route('employee.ui.orders')->with('success', 'Commande modifiée.');
     }
 
     public function addPayment(Request $request, Order $order)

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\Agency;
+use App\Models\CategoryExpense;
 use App\Models\Client;
 use App\Models\EmployeeRequest;
 use App\Models\Expense;
@@ -96,6 +97,9 @@ class OwnerUiController extends Controller
             'email' => ['required', 'email', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'agency_id' => ['required', 'exists:agencies,id'],
+            'gender' => ['nullable', 'in:homme,femme,autre'],
+            'phone' => ['nullable', 'string', 'max:50'],
+            'address' => ['nullable', 'string', 'max:255'],
         ]);
 
         $agency = Agency::where('id', $data['agency_id'])
@@ -111,6 +115,9 @@ class OwnerUiController extends Controller
             'is_active' => true,
             'pressing_id' => Auth::user()->pressing_id,
             'agency_id' => $agency->id,
+            'gender' => $data['gender'] ?? null,
+            'phone' => $data['phone'] ?? null,
+            'address' => $data['address'] ?? null,
         ]);
 
         return redirect()->route('owner.ui.employees')->with('success', 'Employé ajouté.');
@@ -124,14 +131,34 @@ class OwnerUiController extends Controller
         return redirect()->route('owner.ui.employees')->with('success', 'Statut employé mis à jour.');
     }
 
-    public function services()
+    public function updateEmployeePassword(Request $request, User $employee)
     {
+        abort_unless($employee->pressing_id === Auth::user()->pressing_id && $employee->role === User::ROLE_EMPLOYEE, 403);
+
+        $data = $request->validate([
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $employee->update(['password' => Hash::make($data['password'])]);
+
+        return redirect()->route('owner.ui.employees')->with('success', 'Nouveau mot de passe employé enregistré.');
+    }
+
+    public function services(Request $request)
+    {
+        $showDeleted = (bool) $request->query('show_deleted');
+
+        $services = Service::whereHas('agency', fn ($q) => $q->where('pressing_id', Auth::user()->pressing_id))
+            ->with('agency');
+
+        if ($showDeleted) {
+            $services->withTrashed();
+        }
+
         return view('owner.services', [
-            'services' => Service::whereHas('agency', fn ($q) => $q->where('pressing_id', Auth::user()->pressing_id))
-                ->with('agency')
-                ->latest()
-                ->get(),
+            'services' => $services->latest()->get(),
             'agencies' => Agency::where('pressing_id', Auth::user()->pressing_id)->where('is_active', true)->orderBy('name')->get(),
+            'filters' => ['show_deleted' => $showDeleted],
         ]);
     }
 
@@ -149,9 +176,56 @@ class OwnerUiController extends Controller
             ->where('is_active', true)
             ->firstOrFail();
 
-        Service::create($data + ['agency_id' => $agency->id]);
+        Service::create($data + ['agency_id' => $agency->id, 'is_active' => true]);
 
         return redirect()->route('owner.ui.services')->with('success', 'Service ajouté.');
+    }
+
+
+
+    public function updateService(Request $request, Service $service)
+    {
+        abort_unless($service->agency && $service->agency->pressing_id === Auth::user()->pressing_id, 403);
+
+        $data = $request->validate([
+            'agency_id' => ['required', 'exists:agencies,id'],
+            'name' => ['required', 'string', 'max:255'],
+            'price' => ['required', 'numeric', 'min:0'],
+            'description' => ['nullable', 'string'],
+        ]);
+
+        Agency::where('id', $data['agency_id'])->where('pressing_id', Auth::user()->pressing_id)->where('is_active', true)->firstOrFail();
+
+        $service->update($data);
+
+        return redirect()->route('owner.ui.services')->with('success', 'Service modifié.');
+    }
+
+    public function toggleService(Service $service)
+    {
+        abort_unless($service->agency && $service->agency->pressing_id === Auth::user()->pressing_id, 403);
+        $service->update(['is_active' => ! $service->is_active]);
+
+        return redirect()->route('owner.ui.services')->with('success', 'Statut service mis à jour.');
+    }
+
+    public function destroyService(Service $service)
+    {
+        abort_unless($service->agency && $service->agency->pressing_id === Auth::user()->pressing_id, 403);
+        $service->delete();
+
+        return redirect()->route('owner.ui.services')->with('success', 'Service supprimé (soft delete).');
+    }
+
+    public function forceDeleteService(int $service)
+    {
+        $serviceModel = Service::withTrashed()->findOrFail($service);
+        abort_unless($serviceModel->agency && $serviceModel->agency->pressing_id === Auth::user()->pressing_id, 403);
+        abort_if(! $serviceModel->trashed(), 422, 'Le service doit être supprimé avant suppression définitive.');
+
+        $serviceModel->forceDelete();
+
+        return redirect()->route('owner.ui.services', ['show_deleted' => 1])->with('success', 'Service supprimé définitivement.');
     }
 
     public function orders(Request $request)
@@ -180,7 +254,7 @@ class OwnerUiController extends Controller
         return view('owner.orders', [
             'orders' => $ordersQuery->latest()->get(),
             'agencies' => Agency::where('pressing_id', Auth::user()->pressing_id)->where('is_active', true)->orderBy('name')->get(),
-            'services' => Service::whereHas('agency', fn ($q) => $q->where('pressing_id', Auth::user()->pressing_id))->orderBy('name')->get(),
+            'services' => Service::whereHas('agency', fn ($q) => $q->where('pressing_id', Auth::user()->pressing_id))->where('is_active', true)->orderBy('name')->get(),
             'filters' => [
                 'status' => $status,
                 'arrival_date' => $arriveDate,
@@ -222,7 +296,7 @@ class OwnerUiController extends Controller
         return view('owner.order-edit', [
             'order' => $order,
             'agencies' => Agency::where('pressing_id', Auth::user()->pressing_id)->where('is_active', true)->orderBy('name')->get(),
-            'services' => Service::whereHas('agency', fn ($q) => $q->where('pressing_id', Auth::user()->pressing_id))->orderBy('name')->get(),
+            'services' => Service::whereHas('agency', fn ($q) => $q->where('pressing_id', Auth::user()->pressing_id))->where('is_active', true)->orderBy('name')->get(),
         ]);
     }
 
@@ -455,8 +529,9 @@ class OwnerUiController extends Controller
         $user = Auth::user();
 
         return view('owner.expenses', [
-            'expenses' => Expense::where('pressing_id', $user->pressing_id)->with('agency')->latest('expense_date')->get(),
+            'expenses' => Expense::where('pressing_id', $user->pressing_id)->with(['agency', 'categoryExpense'])->latest('expense_date')->get(),
             'agencies' => Agency::where('pressing_id', $user->pressing_id)->where('is_active', true)->orderBy('name')->get(),
+            'categories' => CategoryExpense::orderBy('name')->get(),
         ]);
     }
 
@@ -473,6 +548,7 @@ class OwnerUiController extends Controller
             ...$data,
             'pressing_id' => Auth::user()->pressing_id,
             'agency_id' => $agencyId,
+            'category' => CategoryExpense::find($data['category_expense_id'])?->name,
         ]);
 
         return redirect()->route('owner.ui.expenses')->with('success', 'Dépense ajoutée.');
@@ -492,6 +568,7 @@ class OwnerUiController extends Controller
         $expense->update([
             ...$data,
             'agency_id' => $agencyId,
+            'category' => CategoryExpense::find($data['category_expense_id'])?->name,
         ]);
 
         return redirect()->route('owner.ui.expenses')->with('success', 'Dépense modifiée.');
@@ -562,7 +639,7 @@ class OwnerUiController extends Controller
     {
         return $request->validate([
             'title' => ['required', 'string', 'max:255'],
-            'category' => ['nullable', 'string', 'max:100'],
+            'category_expense_id' => ['nullable', 'exists:category_expenses,id'],
             'amount' => ['required', 'numeric', 'min:0'],
             'expense_date' => ['required', 'date'],
             'agency_id' => ['nullable', 'exists:agencies,id'],
@@ -594,6 +671,7 @@ class OwnerUiController extends Controller
         foreach ($data['items'] as $item) {
             $service = Service::where('id', $item['service_id'])
                 ->where('agency_id', $agency->id)
+                ->where('is_active', true)
                 ->firstOrFail();
 
             $lineTotal = $service->price * $item['quantity'];

@@ -72,9 +72,14 @@ Route::middleware(['auth', RoleMiddleware::class.':owner'])->prefix('owner')->gr
     Route::get('/ui/employees', [OwnerUiController::class, 'employees'])->name('owner.ui.employees');
     Route::post('/ui/employees', [OwnerUiController::class, 'storeEmployee'])->name('owner.ui.employees.store');
     Route::post('/ui/employees/{employee}/toggle', [OwnerUiController::class, 'toggleEmployee'])->name('owner.ui.employees.toggle');
+    Route::post('/ui/employees/{employee}/password', [OwnerUiController::class, 'updateEmployeePassword'])->name('owner.ui.employees.password');
 
     Route::get('/ui/services', [OwnerUiController::class, 'services'])->name('owner.ui.services');
     Route::post('/ui/services', [OwnerUiController::class, 'storeService'])->name('owner.ui.services.store');
+    Route::post('/ui/services/{service}', [OwnerUiController::class, 'updateService'])->name('owner.ui.services.update');
+    Route::post('/ui/services/{service}/toggle', [OwnerUiController::class, 'toggleService'])->name('owner.ui.services.toggle');
+    Route::post('/ui/services/{service}/delete', [OwnerUiController::class, 'destroyService'])->name('owner.ui.services.delete');
+    Route::post('/ui/services/{service}/force-delete', [OwnerUiController::class, 'forceDeleteService'])->name('owner.ui.services.forceDelete');
 
     Route::get('/ui/orders', [OwnerUiController::class, 'orders'])->name('owner.ui.orders');
     Route::post('/ui/orders', [OwnerUiController::class, 'storeOrder'])->name('owner.ui.orders.store');
@@ -116,6 +121,7 @@ Route::middleware(['auth', RoleMiddleware::class.':employee'])->prefix('employee
 
     Route::get('/ui/orders', [EmployeeUiController::class, 'orders'])->name('employee.ui.orders');
     Route::post('/ui/orders', [EmployeeUiController::class, 'storeOrder'])->name('employee.ui.orders.store');
+    Route::post('/ui/orders/{order}', [EmployeeUiController::class, 'updateOrder'])->name('employee.ui.orders.update');
     Route::post('/ui/orders/{order}/ready', [EmployeeUiController::class, 'markReady'])->name('employee.ui.orders.ready');
     Route::post('/ui/orders/{order}/picked-up', [EmployeeUiController::class, 'markPickedUp'])->name('employee.ui.orders.picked');
     Route::post('/ui/orders/{order}/payments', [EmployeeUiController::class, 'addPayment'])->name('employee.ui.orders.payments.store');

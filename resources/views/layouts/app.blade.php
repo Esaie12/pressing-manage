@@ -95,7 +95,13 @@
                     @endif
                 </button>
 
-                <a href="{{ route('profile.edit') }}" class="btn btn-outline-primary">Profil</a>
+                <a href="{{ auth()->user()->photo_path ? url()->current() : route('profile.edit') }}" class="btn btn-outline-primary p-1">
+                    @if(auth()->user()->photo_path)
+                        <img src="{{ asset('storage/'.auth()->user()->photo_path) }}" alt="Profil" style="width:32px;height:32px;object-fit:cover;border-radius:50%;">
+                    @else
+                        Profil
+                    @endif
+                </a>
 
                 <form method="POST" action="/logout" class="d-flex">
                     @csrf
