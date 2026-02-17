@@ -4,16 +4,19 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\Agency;
+use App\Models\CategoryExpense;
 use App\Models\Client;
 use App\Models\EmployeeRequest;
 use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\Order;
+use App\Models\OrderStatus;
 use App\Models\OrderItem;
 use App\Models\OwnerSubscription;
 use App\Models\Pressing;
 use App\Models\Service;
 use App\Models\SubscriptionPlan;
+use App\Models\Transaction;
 use App\Models\User;
 use App\Models\UserNotification;
 use Carbon\Carbon;
@@ -24,10 +27,15 @@ use Illuminate\Support\Facades\Hash;
 
 class OwnerUiController extends Controller
 {
-    public function dashboard()
+    public function dashboard(Request $request)
     {
         $user = Auth::user();
+        $selectedAgencyId = $request->query('agency_id');
+
         $orders = Order::whereHas('agency', fn ($q) => $q->where('pressing_id', $user->pressing_id));
+        if ($selectedAgencyId) {
+            $orders->where('agency_id', $selectedAgencyId);
+        }
 
         $pressing = Pressing::find($user->pressing_id);
         $greeting = now()->hour >= 12 ? 'Bonsoir' : 'Bonjour';
@@ -39,13 +47,18 @@ class OwnerUiController extends Controller
             }
         }
 
+        $todayCash = (clone $orders)->whereDate('created_at', now()->toDateString())->sum('advance_amount');
+
         return view('owner.dashboard', [
             'agenciesCount' => Agency::where('pressing_id', $user->pressing_id)->count(),
             'employeesCount' => User::where('pressing_id', $user->pressing_id)->where('role', User::ROLE_EMPLOYEE)->count(),
             'ordersCount' => (clone $orders)->count(),
+            'todayCash' => $todayCash,
             'revenue' => (clone $orders)->sum('total'),
             'greeting' => $greeting,
             'closingAlert' => $closingAlert,
+            'agencies' => Agency::where('pressing_id', $user->pressing_id)->orderBy('name')->get(),
+            'selectedAgencyId' => $selectedAgencyId,
         ]);
     }
 
@@ -96,6 +109,9 @@ class OwnerUiController extends Controller
             'email' => ['required', 'email', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'agency_id' => ['required', 'exists:agencies,id'],
+            'gender' => ['nullable', 'in:homme,femme,autre'],
+            'phone' => ['nullable', 'string', 'max:50'],
+            'address' => ['nullable', 'string', 'max:255'],
         ]);
 
         $agency = Agency::where('id', $data['agency_id'])
@@ -111,6 +127,9 @@ class OwnerUiController extends Controller
             'is_active' => true,
             'pressing_id' => Auth::user()->pressing_id,
             'agency_id' => $agency->id,
+            'gender' => $data['gender'] ?? null,
+            'phone' => $data['phone'] ?? null,
+            'address' => $data['address'] ?? null,
         ]);
 
         return redirect()->route('owner.ui.employees')->with('success', 'Employé ajouté.');
@@ -124,14 +143,34 @@ class OwnerUiController extends Controller
         return redirect()->route('owner.ui.employees')->with('success', 'Statut employé mis à jour.');
     }
 
-    public function services()
+    public function updateEmployeePassword(Request $request, User $employee)
     {
+        abort_unless($employee->pressing_id === Auth::user()->pressing_id && $employee->role === User::ROLE_EMPLOYEE, 403);
+
+        $data = $request->validate([
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $employee->update(['password' => Hash::make($data['password'])]);
+
+        return redirect()->route('owner.ui.employees')->with('success', 'Nouveau mot de passe employé enregistré.');
+    }
+
+    public function services(Request $request)
+    {
+        $showDeleted = (bool) $request->query('show_deleted');
+
+        $services = Service::whereHas('agency', fn ($q) => $q->where('pressing_id', Auth::user()->pressing_id))
+            ->with('agency');
+
+        if ($showDeleted) {
+            $services->withTrashed();
+        }
+
         return view('owner.services', [
-            'services' => Service::whereHas('agency', fn ($q) => $q->where('pressing_id', Auth::user()->pressing_id))
-                ->with('agency')
-                ->latest()
-                ->get(),
+            'services' => $services->latest()->get(),
             'agencies' => Agency::where('pressing_id', Auth::user()->pressing_id)->where('is_active', true)->orderBy('name')->get(),
+            'filters' => ['show_deleted' => $showDeleted],
         ]);
     }
 
@@ -149,9 +188,56 @@ class OwnerUiController extends Controller
             ->where('is_active', true)
             ->firstOrFail();
 
-        Service::create($data + ['agency_id' => $agency->id]);
+        Service::create($data + ['agency_id' => $agency->id, 'is_active' => true]);
 
         return redirect()->route('owner.ui.services')->with('success', 'Service ajouté.');
+    }
+
+
+
+    public function updateService(Request $request, Service $service)
+    {
+        abort_unless($service->agency && $service->agency->pressing_id === Auth::user()->pressing_id, 403);
+
+        $data = $request->validate([
+            'agency_id' => ['required', 'exists:agencies,id'],
+            'name' => ['required', 'string', 'max:255'],
+            'price' => ['required', 'numeric', 'min:0'],
+            'description' => ['nullable', 'string'],
+        ]);
+
+        Agency::where('id', $data['agency_id'])->where('pressing_id', Auth::user()->pressing_id)->where('is_active', true)->firstOrFail();
+
+        $service->update($data);
+
+        return redirect()->route('owner.ui.services')->with('success', 'Service modifié.');
+    }
+
+    public function toggleService(Service $service)
+    {
+        abort_unless($service->agency && $service->agency->pressing_id === Auth::user()->pressing_id, 403);
+        $service->update(['is_active' => ! $service->is_active]);
+
+        return redirect()->route('owner.ui.services')->with('success', 'Statut service mis à jour.');
+    }
+
+    public function destroyService(Service $service)
+    {
+        abort_unless($service->agency && $service->agency->pressing_id === Auth::user()->pressing_id, 403);
+        $service->delete();
+
+        return redirect()->route('owner.ui.services')->with('success', 'Service supprimé (soft delete).');
+    }
+
+    public function forceDeleteService(int $service)
+    {
+        $serviceModel = Service::withTrashed()->findOrFail($service);
+        abort_unless($serviceModel->agency && $serviceModel->agency->pressing_id === Auth::user()->pressing_id, 403);
+        abort_if(! $serviceModel->trashed(), 422, 'Le service doit être supprimé avant suppression définitive.');
+
+        $serviceModel->forceDelete();
+
+        return redirect()->route('owner.ui.services', ['show_deleted' => 1])->with('success', 'Service supprimé définitivement.');
     }
 
     public function orders(Request $request)
@@ -180,7 +266,8 @@ class OwnerUiController extends Controller
         return view('owner.orders', [
             'orders' => $ordersQuery->latest()->get(),
             'agencies' => Agency::where('pressing_id', Auth::user()->pressing_id)->where('is_active', true)->orderBy('name')->get(),
-            'services' => Service::whereHas('agency', fn ($q) => $q->where('pressing_id', Auth::user()->pressing_id))->orderBy('name')->get(),
+            'services' => Service::whereHas('agency', fn ($q) => $q->where('pressing_id', Auth::user()->pressing_id))->where('is_active', true)->orderBy('name')->get(),
+            'orderStatuses' => OrderStatus::orderBy('sort_order')->get(),
             'filters' => [
                 'status' => $status,
                 'arrival_date' => $arriveDate,
@@ -209,6 +296,20 @@ class OwnerUiController extends Controller
                 'amount' => $total,
                 'issued_at' => now()->toDateString(),
             ]);
+
+            if ((float) $order->advance_amount > 0) {
+                Transaction::create([
+                    'pressing_id' => Auth::user()->pressing_id,
+                    'agency_id' => $order->agency_id,
+                    'user_id' => Auth::id(),
+                    'order_id' => $order->id,
+                    'type' => 'encaissement',
+                    'amount' => $order->advance_amount,
+                    'payment_method' => $order->payment_method,
+                    'label' => 'Acompte commande '.$order->reference,
+                    'happened_at' => now(),
+                ]);
+            }
         });
 
         return redirect()->route('owner.ui.orders')->with('success', 'Commande créée avec plusieurs items.');
@@ -222,7 +323,7 @@ class OwnerUiController extends Controller
         return view('owner.order-edit', [
             'order' => $order,
             'agencies' => Agency::where('pressing_id', Auth::user()->pressing_id)->where('is_active', true)->orderBy('name')->get(),
-            'services' => Service::whereHas('agency', fn ($q) => $q->where('pressing_id', Auth::user()->pressing_id))->orderBy('name')->get(),
+            'services' => Service::whereHas('agency', fn ($q) => $q->where('pressing_id', Auth::user()->pressing_id))->where('is_active', true)->orderBy('name')->get(),
         ]);
     }
 
@@ -265,6 +366,81 @@ class OwnerUiController extends Controller
         $order->delete();
 
         return redirect()->route('owner.ui.orders')->with('success', 'Commande supprimée (soft delete).');
+    }
+
+
+    public function markReady(Order $order)
+    {
+        $order->load('agency');
+        abort_unless($order->agency && $order->agency->pressing_id === Auth::user()->pressing_id, 403);
+
+        $order->update(['status' => 'ready', 'ready_at' => now()]);
+
+        return redirect()->route('owner.ui.orders')->with('success', 'Commande marquée prête.');
+    }
+
+    public function markPickedUp(Order $order)
+    {
+        $order->load('agency');
+        abort_unless($order->agency && $order->agency->pressing_id === Auth::user()->pressing_id, 403);
+
+        if ((float) $order->advance_amount < (float) $order->total) {
+            return redirect()->route('owner.ui.orders')->with('error', 'Commande non totalement payée.');
+        }
+
+        $order->update(['status' => 'picked_up', 'picked_up_at' => now()]);
+
+        return redirect()->route('owner.ui.orders')->with('success', 'Commande marquée retirée.');
+    }
+
+    public function addPayment(Request $request, Order $order)
+    {
+        $order->load('agency');
+        abort_unless($order->agency && $order->agency->pressing_id === Auth::user()->pressing_id, 403);
+
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'min:1'],
+            'payment_method' => ['nullable', 'in:cash,wave,orange_money,card'],
+        ]);
+
+        $remaining = max(0, (float) $order->total - (float) $order->advance_amount);
+        $amount = min($remaining, (float) $data['amount']);
+
+        if ($amount <= 0) {
+            return redirect()->route('owner.ui.orders')->with('error', 'Commande déjà totalement payée.');
+        }
+
+        $order->advance_amount = (float) $order->advance_amount + $amount;
+        $order->paid_advance = $order->advance_amount > 0;
+        if (! empty($data['payment_method'])) {
+            $order->payment_method = $data['payment_method'];
+        }
+        $order->save();
+
+        Transaction::create([
+            'pressing_id' => Auth::user()->pressing_id,
+            'agency_id' => $order->agency_id,
+            'user_id' => Auth::id(),
+            'order_id' => $order->id,
+            'type' => 'encaissement',
+            'amount' => $amount,
+            'payment_method' => $data['payment_method'] ?? $order->payment_method,
+            'label' => 'Paiement commande '.$order->reference,
+            'happened_at' => now(),
+        ]);
+
+        return redirect()->route('owner.ui.orders')->with('success', 'Paiement ajouté avec succès.');
+    }
+
+    public function transactions()
+    {
+        return view('owner.transactions', [
+            'transactions' => Transaction::where('pressing_id', Auth::user()->pressing_id)
+                ->with(['agency', 'user', 'order', 'expense'])
+                ->latest('happened_at')
+                ->latest()
+                ->get(),
+        ]);
     }
 
     public function invoices()
@@ -415,7 +591,7 @@ class OwnerUiController extends Controller
         }
 
         $statusDistribution = [
-            'created' => (clone $query)->where('status', 'created')->count(),
+            'pending' => (clone $query)->where('status', 'pending')->count(),
             'ready' => (clone $query)->where('status', 'ready')->count(),
             'picked_up' => (clone $query)->whereNotNull('picked_up_at')->count(),
         ];
@@ -455,8 +631,9 @@ class OwnerUiController extends Controller
         $user = Auth::user();
 
         return view('owner.expenses', [
-            'expenses' => Expense::where('pressing_id', $user->pressing_id)->with('agency')->latest('expense_date')->get(),
+            'expenses' => Expense::where('pressing_id', $user->pressing_id)->with(['agency', 'categoryExpense'])->latest('expense_date')->get(),
             'agencies' => Agency::where('pressing_id', $user->pressing_id)->where('is_active', true)->orderBy('name')->get(),
+            'categories' => CategoryExpense::orderBy('name')->get(),
         ]);
     }
 
@@ -469,10 +646,22 @@ class OwnerUiController extends Controller
             Agency::where('id', $agencyId)->where('pressing_id', Auth::user()->pressing_id)->firstOrFail();
         }
 
-        Expense::create([
+        $expense = Expense::create([
             ...$data,
             'pressing_id' => Auth::user()->pressing_id,
             'agency_id' => $agencyId,
+            'category' => CategoryExpense::find($data['category_expense_id'])?->name,
+        ]);
+
+        Transaction::create([
+            'pressing_id' => Auth::user()->pressing_id,
+            'agency_id' => $agencyId,
+            'user_id' => Auth::id(),
+            'expense_id' => $expense->id,
+            'type' => 'paiement',
+            'amount' => $expense->amount,
+            'label' => 'Dépense: '.$expense->title,
+            'happened_at' => now(),
         ]);
 
         return redirect()->route('owner.ui.expenses')->with('success', 'Dépense ajoutée.');
@@ -492,6 +681,7 @@ class OwnerUiController extends Controller
         $expense->update([
             ...$data,
             'agency_id' => $agencyId,
+            'category' => CategoryExpense::find($data['category_expense_id'])?->name,
         ]);
 
         return redirect()->route('owner.ui.expenses')->with('success', 'Dépense modifiée.');
@@ -551,10 +741,11 @@ class OwnerUiController extends Controller
             'paid_advance' => ['nullable', 'boolean'],
             'advance_amount' => ['nullable', 'numeric', 'min:0'],
             'payment_method' => ['nullable', 'in:cash,wave,orange_money,card'],
-            'status' => ['nullable', 'string', 'max:50'],
+            'status' => ['nullable', 'in:pending,ready,picked_up'],
             'is_delivery' => ['nullable', 'boolean'],
             'delivery_address' => ['nullable', 'string', 'max:255'],
             'delivery_fee' => ['nullable', 'numeric', 'min:0'],
+            'discount_amount' => ['nullable', 'numeric', 'min:0'],
         ]);
     }
 
@@ -562,7 +753,7 @@ class OwnerUiController extends Controller
     {
         return $request->validate([
             'title' => ['required', 'string', 'max:255'],
-            'category' => ['nullable', 'string', 'max:100'],
+            'category_expense_id' => ['nullable', 'exists:category_expenses,id'],
             'amount' => ['required', 'numeric', 'min:0'],
             'expense_date' => ['required', 'date'],
             'agency_id' => ['nullable', 'exists:agencies,id'],
@@ -594,6 +785,7 @@ class OwnerUiController extends Controller
         foreach ($data['items'] as $item) {
             $service = Service::where('id', $item['service_id'])
                 ->where('agency_id', $agency->id)
+                ->where('is_active', true)
                 ->firstOrFail();
 
             $lineTotal = $service->price * $item['quantity'];
@@ -615,6 +807,9 @@ class OwnerUiController extends Controller
             $deliveryFee = 0;
         }
 
+        $discountAmount = min((float) ($data['discount_amount'] ?? 0), $total);
+        $total -= $discountAmount;
+
         $advanceAmount = min((float) ($data['advance_amount'] ?? 0), $total);
 
         $order = $existing ?? new Order();
@@ -626,13 +821,14 @@ class OwnerUiController extends Controller
         $order->fill([
             'agency_id' => $agency->id,
             'client_id' => $client->id,
-            'status' => $data['status'] ?? ($existing?->status ?? 'created'),
+            'status' => $data['status'] ?? ($existing?->status ?? 'pending'),
             'paid_advance' => (bool) ($data['paid_advance'] ?? false),
             'advance_amount' => $advanceAmount,
             'payment_method' => $data['payment_method'] ?? null,
             'is_delivery' => $isDelivery,
             'delivery_address' => $isDelivery ? ($data['delivery_address'] ?? null) : null,
             'delivery_fee' => $deliveryFee,
+            'discount_amount' => $discountAmount,
             'total' => $total,
         ]);
         $order->save();
