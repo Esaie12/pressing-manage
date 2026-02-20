@@ -489,6 +489,7 @@ class OwnerUiController extends Controller
         ];
     }
 
+
     public function cashClosures(Request $request)
     {
         $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
@@ -586,139 +587,7 @@ class OwnerUiController extends Controller
         return view('owner.cash-closure-show', ['closure' => $cashClosure]);
     }
 
-    public function saveAccountingReport(Request $request)
-    {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
-        abort_if(! $pressing->module_accounting_enabled, 403, 'Module Comptabilité non activé.');
-
-        $data = $request->validate([
-            'month' => ['required', 'date'],
-            'agency_id' => ['nullable', 'exists:agencies,id'],
-            'note' => ['nullable', 'string', 'max:2000'],
-        ]);
-
-        $agencyId = $data['agency_id'] ?? null;
-        if ($agencyId) {
-            Agency::where('id', $agencyId)->where('pressing_id', $pressing->id)->firstOrFail();
-        }
-
-        $preview = $this->buildAccountingPreview($pressing->id, $data['month'], $agencyId);
-
-        DB::transaction(function () use ($pressing, $data, $agencyId, $preview) {
-            $report = AccountingReport::create([
-                'pressing_id' => $pressing->id,
-                'agency_id' => $agencyId,
-                'accounting_setup_id' => $preview['setup']?->id,
-                'created_by_user_id' => Auth::id(),
-                'month' => Carbon::parse($data['month'])->startOfMonth()->toDateString(),
-                'total_credits' => $preview['total_credits'],
-                'total_debits' => $preview['total_debits'],
-                'net_result' => $preview['net_result'],
-                'snapshot' => $preview['snapshot'],
-                'note' => $data['note'] ?? null,
-                'saved_at' => now(),
-            ]);
-
-            foreach ($preview['entries'] as $entry) {
-                AccountingReportEntry::create([
-                    'accounting_report_id' => $report->id,
-                    'transaction_id' => $entry['transaction_id'],
-                    'agency_id' => $entry['agency_id'],
-                    'user_id' => $entry['user_id'],
-                    'entry_type' => $entry['entry_type'],
-                    'amount' => $entry['amount'],
-                    'payment_method' => $entry['payment_method'],
-                    'label' => $entry['label'],
-                    'order_reference' => $entry['order_reference'],
-                    'happened_at' => $entry['happened_at'],
-                ]);
-            }
-        });
-
-        return redirect()->route('owner.ui.accounting.reports', ['month' => $data['month'], 'agency_id' => $agencyId])->with('success', 'Bilan mensuel sauvegardé.');
-    }
-
     
-    private function buildAccountingPreview(int $pressingId, string $month, ?string $agencyId): array
-    {
-        $monthStart = Carbon::parse($month)->startOfMonth();
-        $monthEnd = $monthStart->copy()->endOfMonth();
-
-        $transactions = Transaction::where('pressing_id', $pressingId)
-            ->where('is_cancelled', false)
-            ->whereBetween('happened_at', [$monthStart->startOfDay(), $monthEnd->endOfDay()])
-            ->with('order');
-
-        if ($agencyId) {
-            $transactions->where('agency_id', $agencyId);
-        }
-
-        $txList = $transactions->get();
-        $credits = (float) $txList->where('type', 'encaissement')->sum('amount');
-        $debitsTx = (float) $txList->where('type', 'paiement')->sum('amount');
-
-        $expenseQuery = Expense::where('pressing_id', $pressingId)->whereBetween('expense_date', [$monthStart->toDateString(), $monthEnd->toDateString()]);
-        if ($agencyId) {
-            $expenseQuery->where('agency_id', $agencyId);
-        }
-        $expenses = (float) $expenseQuery->sum('amount');
-
-        $setup = AccountingSetup::where('pressing_id', $pressingId)->where('agency_id', $agencyId)->first();
-        $setupDebits = (float) ($setup?->financial_debts ?? 0) + (float) ($setup?->operating_debts ?? 0) + (float) ($setup?->fixed_asset_debts ?? 0) + (float) ($setup?->other_debts ?? 0) + (float) ($setup?->employee_salaries ?? 0);
-
-        $totalDebits = $debitsTx + $expenses + $setupDebits;
-        $netResult = $credits - $totalDebits;
-
-        $entries = $txList->map(function ($tx) {
-            return [
-                'transaction_id' => $tx->id,
-                'agency_id' => $tx->agency_id,
-                'user_id' => $tx->user_id,
-                'entry_type' => $tx->type,
-                'amount' => (float) $tx->amount,
-                'payment_method' => $tx->payment_method,
-                'label' => $tx->label,
-                'order_reference' => $tx->order?->reference,
-                'happened_at' => $tx->happened_at,
-            ];
-        })->values()->all();
-
-        return [
-            'total_credits' => $credits,
-            'total_debits' => $totalDebits,
-            'net_result' => $netResult,
-            'entries' => $entries,
-            'setup' => $setup,
-            'snapshot' => [
-                'period' => $monthStart->format('Y-m'),
-                'credits' => $credits,
-                'debits_transactions' => $debitsTx,
-                'debits_expenses' => $expenses,
-                'debits_setup' => $setupDebits,
-                'net_result' => $netResult,
-                'assets' => [
-                    'capital' => (float) ($setup?->capital ?? 0),
-                    'reserves' => (float) ($setup?->reserves ?? 0),
-                    'retained_earnings' => (float) ($setup?->retained_earnings ?? 0),
-                    'intangible_assets' => (float) ($setup?->intangible_assets ?? 0),
-                    'tangible_assets' => (float) ($setup?->tangible_assets ?? 0),
-                    'financial_assets' => (float) ($setup?->financial_assets ?? 0),
-                    'stocks' => (float) ($setup?->stocks ?? 0),
-                    'receivables' => (float) ($setup?->receivables ?? 0),
-                    'treasury' => (float) ($setup?->treasury ?? 0),
-                ],
-                'liabilities' => [
-                    'financial_debts' => (float) ($setup?->financial_debts ?? 0),
-                    'operating_debts' => (float) ($setup?->operating_debts ?? 0),
-                    'fixed_asset_debts' => (float) ($setup?->fixed_asset_debts ?? 0),
-                    'other_debts' => (float) ($setup?->other_debts ?? 0),
-                    'employee_salaries' => (float) ($setup?->employee_salaries ?? 0),
-                ],
-            ],
-        ];
-    }
-
-
 
     public function agencies()
     {
