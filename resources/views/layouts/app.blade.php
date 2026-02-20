@@ -9,7 +9,7 @@
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
     <style>
-        body { background: #f5f7fb; }
+        body { background: #f5f7fb; min-height: 100vh; display: flex; flex-direction: column; }
         .navbar-brand small { display:block; font-size:.7rem; letter-spacing:.08em; text-transform: uppercase; }
         .stat-card { border:0; border-radius: 1rem; }
         .toast-container { z-index: 2000; }
@@ -28,15 +28,25 @@
 
     $userNotifications = \App\Models\UserNotification::where('user_id', auth()->id())->latest()->limit(15)->get();
     $notifCount += \App\Models\UserNotification::where('user_id', auth()->id())->where('is_read', false)->count();
-    $ownerPressing = auth()->user()->role === \App\Models\User::ROLE_OWNER
+    $activePressing = in_array(auth()->user()->role, [\App\Models\User::ROLE_OWNER, \App\Models\User::ROLE_EMPLOYEE], true)
         ? \App\Models\Pressing::find(auth()->user()->pressing_id)
         : null;
+    $ownerPressing = auth()->user()->role === \App\Models\User::ROLE_OWNER
+        ? $activePressing
+        : null;
+
+    $activeSubscription = $activePressing
+        ? \App\Models\OwnerSubscription::where('pressing_id', $activePressing->id)->where('is_active', true)->whereDate('ends_at', '>=', now()->toDateString())->with('plan')->latest('ends_at')->first()
+        : null;
+
+    $brandLabel = ($activePressing && $activeSubscription && empty($activePressing->invoice_logo_path))
+        ? $activePressing->name
+        : 'Pressing Platform';
 @endphp
 <nav class="navbar navbar-expand-lg bg-white border-bottom sticky-top">
     <div class="container-fluid container-xl">
         <a class="navbar-brand fw-bold" href="{{ route('dashboard') }}">
-            <small class="text-primary">Pressing Platform</small>
-            @yield('heading', 'Dashboard')
+            <small class="text-primary">{{ $brandLabel }}</small>
         </a>
 
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
@@ -171,13 +181,26 @@
 </div>
 @endauth
 
-<main class="container-xl py-4">
+<main class="container-xl py-4 flex-grow-1">
+    @hasSection('heading')
+        <div class="mb-3">
+            <h5 class="mb-0">@yield('heading')</h5>
+        </div>
+    @endif
+
     @if($errors->any())
         <div class="alert alert-danger"><ul class="mb-0">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>
     @endif
 
     @yield('content')
 </main>
+
+<footer class="border-top bg-white py-3 mt-auto">
+    <div class="container-xl small text-muted d-flex flex-wrap justify-content-between">
+        <span>© {{ date('Y') }} Pressing Platform</span>
+        <span>Fait avec ❤️ pour votre pressing</span>
+    </div>
+</footer>
 
 <div class="toast-container position-fixed top-0 end-0 p-3">
     @if(session('success'))<div class="toast align-items-center text-bg-success border-0 js-toast" role="alert" aria-live="assertive" aria-atomic="true"><div class="d-flex"><div class="toast-body">{{ session('success') }}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>@endif

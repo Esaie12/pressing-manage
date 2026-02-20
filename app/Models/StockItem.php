@@ -11,10 +11,14 @@ class StockItem extends Model
         'name',
         'sku',
         'unit',
+        'alert_quantity_central',
+        'alert_quantity_agency',
         'is_active',
     ];
 
     protected $casts = [
+        'alert_quantity_central' => 'decimal:2',
+        'alert_quantity_agency' => 'decimal:2',
         'is_active' => 'boolean',
     ];
 
