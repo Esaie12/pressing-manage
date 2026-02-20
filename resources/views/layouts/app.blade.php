@@ -28,6 +28,9 @@
 
     $userNotifications = \App\Models\UserNotification::where('user_id', auth()->id())->latest()->limit(15)->get();
     $notifCount += \App\Models\UserNotification::where('user_id', auth()->id())->where('is_read', false)->count();
+    $ownerPressing = auth()->user()->role === \App\Models\User::ROLE_OWNER
+        ? \App\Models\Pressing::find(auth()->user()->pressing_id)
+        : null;
 @endphp
 <nav class="navbar navbar-expand-lg bg-white border-bottom sticky-top">
     <div class="container-fluid container-xl">
@@ -59,16 +62,33 @@
                             <li><a class="dropdown-item" href="{{ route('owner.ui.orders') }}">Commandes</a></li>
                             <li><a class="dropdown-item" href="{{ route('owner.ui.invoices') }}">Factures</a></li>
                             <li><a class="dropdown-item" href="{{ route('owner.ui.requests') }}">Demandes employés</a></li>
+                            <li><a class="dropdown-item" href="{{ route('owner.ui.transactions') }}">Transactions</a></li>
                         </ul>
                     </li>
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {{ request()->routeIs('owner.ui.stats*','owner.ui.expenses*','owner.ui.pricing*') ? 'active fw-semibold' : '' }}" href="#" role="button" data-bs-toggle="dropdown">Pilotage</a>
+                        <a class="nav-link dropdown-toggle {{ request()->routeIs('owner.ui.stats*','owner.ui.expenses*','owner.ui.pricing*','owner.ui.stocks*') ? 'active fw-semibold' : '' }}" href="#" role="button" data-bs-toggle="dropdown">Pilotage</a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ route('owner.ui.stats') }}">Statistiques</a></li>
                             <li><a class="dropdown-item" href="{{ route('owner.ui.expenses') }}">Dépenses</a></li>
-                            <li><a class="dropdown-item" href="{{ route('owner.ui.pricing') }}">Mon abonnement</a></li>
+                            @if($ownerPressing?->module_cash_closure_enabled)
+                                <li><a class="dropdown-item" href="{{ route('owner.ui.cash-closures') }}">Clôture de caisse</a></li>
+                            @endif
+                            @if($ownerPressing?->module_stock_enabled)
+                                <li><a class="dropdown-item" href="{{ route('owner.ui.stocks') }}">Stock</a></li>
+                            @endif
                         </ul>
                     </li>
+
+                    @if($ownerPressing?->module_accounting_enabled)
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle {{ request()->routeIs('owner.ui.accounting.*') ? 'active fw-semibold' : '' }}" href="#" role="button" data-bs-toggle="dropdown">Comptabilité</a>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="{{ route('owner.ui.accounting.settings') }}">Paramètres</a></li>
+                                <li><a class="dropdown-item" href="{{ route('owner.ui.accounting.reports') }}">Bilan</a></li>
+                            </ul>
+                        </li>
+                    @endif
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('owner.ui.pricing*') ? 'active fw-semibold' : '' }}" href="{{ route('owner.ui.pricing') }}">Abonnement</a></li>
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle {{ request()->routeIs('owner.ui.settings*','owner.ui.agencies*','owner.ui.employees*','owner.ui.services*') ? 'active fw-semibold' : '' }}" href="#" role="button" data-bs-toggle="dropdown">Paramètres</a>
                         <ul class="dropdown-menu">
@@ -84,6 +104,18 @@
                     <li class="nav-item"><a class="nav-link {{ request()->routeIs('employee.ui.orders*') ? 'active fw-semibold' : '' }}" href="{{ route('employee.ui.orders') }}">Mes commandes</a></li>
                     <li class="nav-item"><a class="nav-link {{ request()->routeIs('employee.ui.invoices*') ? 'active fw-semibold' : '' }}" href="{{ route('employee.ui.invoices') }}">Mes factures</a></li>
                     <li class="nav-item"><a class="nav-link {{ request()->routeIs('employee.ui.requests*') ? 'active fw-semibold' : '' }}" href="{{ route('employee.ui.requests') }}">Demandes</a></li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {{ request()->routeIs('employee.ui.transactions*','employee.ui.cash-closures*','employee.ui.stock.daily') ? 'active fw-semibold' : '' }}" href="#" role="button" data-bs-toggle="dropdown">Comptabilité</a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ route('employee.ui.transactions') }}">Transactions</a></li>
+                            @if(auth()->user()->pressing?->module_cash_closure_enabled)
+                                <li><a class="dropdown-item" href="{{ route('employee.ui.cash-closures') }}">Clôture</a></li>
+                            @endif
+                            @if(auth()->user()->pressing?->module_stock_enabled)
+                                <li><a class="dropdown-item" href="{{ route('employee.ui.stock.daily') }}">Bilan stock du jour</a></li>
+                            @endif
+                        </ul>
+                    </li>
                 @endif
             </ul>
 
@@ -159,6 +191,29 @@
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
 window.initSelect2 = function(elements){ const $els=$(elements || '.js-select2'); $els.each(function(){ if(!$(this).hasClass('select2-hidden-accessible')) $(this).select2({theme:'bootstrap-5',width:'100%'}); }); }
+
+
+function attachPasswordToggles(root=document){
+    root.querySelectorAll('input[type="password"]').forEach((input)=>{
+        if(input.dataset.toggleReady==='1') return;
+        input.dataset.toggleReady='1';
+        const group=document.createElement('div');
+        group.className='input-group';
+        input.parentNode.insertBefore(group,input);
+        group.appendChild(input);
+        const btn=document.createElement('button');
+        btn.type='button';
+        btn.className='btn btn-outline-secondary';
+        btn.textContent='Afficher';
+        btn.addEventListener('click',()=>{
+            const isPwd=input.type==='password';
+            input.type=isPwd?'text':'password';
+            btn.textContent=isPwd?'Cacher':'Afficher';
+        });
+        group.appendChild(btn);
+    });
+}
+attachPasswordToggles();
 
 document.querySelectorAll('.js-toast').forEach((el)=>{ new bootstrap.Toast(el,{delay:3500}).show(); });
 $(function(){ $('.datatable').DataTable({ pageLength:10, language:{ search:'Recherche:', lengthMenu:'Afficher _MENU_ lignes', info:'Affichage _START_ à _END_ sur _TOTAL_', paginate:{ previous:'Préc', next:'Suiv' }, emptyTable:'Aucune donnée disponible' } }); window.initSelect2(); });

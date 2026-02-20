@@ -14,6 +14,7 @@ class Expense extends Model
         'agency_id',
         'title',
         'category',
+        'category_expense_id',
         'amount',
         'expense_date',
         'notes',
@@ -33,4 +34,10 @@ class Expense extends Model
     {
         return $this->belongsTo(Agency::class);
     }
+
+    public function categoryExpense()
+    {
+        return $this->belongsTo(CategoryExpense::class);
+    }
 }
+

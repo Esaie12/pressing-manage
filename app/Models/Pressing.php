@@ -8,7 +8,19 @@ class Pressing extends Model
 {
     protected $fillable = [
         'name', 'owner_id', 'phone', 'address',
-        'invoice_template', 'invoice_primary_color', 'invoice_welcome_message', 'invoice_logo_path', 'opening_time', 'closing_time'
+        'invoice_template', 'invoice_primary_color', 'invoice_welcome_message', 'invoice_logo_path', 'opening_time', 'closing_time',
+        'allow_transaction_cancellation', 'transaction_cancellation_window_minutes',
+        'module_cash_closure_enabled',
+        'module_accounting_enabled',
+        'module_stock_enabled',
+        'stock_mode',
+    ];
+
+    protected $casts = [
+        'allow_transaction_cancellation' => 'boolean',
+        'module_cash_closure_enabled' => 'boolean',
+        'module_accounting_enabled' => 'boolean',
+        'module_stock_enabled' => 'boolean',
     ];
 
     public function owner()
@@ -29,5 +41,10 @@ class Pressing extends Model
     public function invoices()
     {
         return $this->hasMany(Invoice::class);
+    }
+
+    public function cashClosures()
+    {
+        return $this->hasMany(CashClosure::class);
     }
 }
