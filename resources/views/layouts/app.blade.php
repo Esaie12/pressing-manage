@@ -28,6 +28,9 @@
 
     $userNotifications = \App\Models\UserNotification::where('user_id', auth()->id())->latest()->limit(15)->get();
     $notifCount += \App\Models\UserNotification::where('user_id', auth()->id())->where('is_read', false)->count();
+    $ownerPressing = auth()->user()->role === \App\Models\User::ROLE_OWNER
+        ? \App\Models\Pressing::find(auth()->user()->pressing_id)
+        : null;
 @endphp
 <nav class="navbar navbar-expand-lg bg-white border-bottom sticky-top">
     <div class="container-fluid container-xl">
@@ -67,6 +70,9 @@
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ route('owner.ui.stats') }}">Statistiques</a></li>
                             <li><a class="dropdown-item" href="{{ route('owner.ui.expenses') }}">Dépenses</a></li>
+                            @if($ownerPressing?->module_cash_closure_enabled)
+                                <li><a class="dropdown-item" href="{{ route('owner.ui.cash-closures') }}">Clôture de caisse</a></li>
+                            @endif
                         </ul>
                     </li>
                     <li class="nav-item"><a class="nav-link {{ request()->routeIs('owner.ui.pricing*') ? 'active fw-semibold' : '' }}" href="{{ route('owner.ui.pricing') }}">Abonnement</a></li>

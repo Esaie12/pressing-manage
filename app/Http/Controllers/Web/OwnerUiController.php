@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Controller;
 use App\Models\Agency;
 use App\Models\CategoryExpense;
+use App\Models\CashClosure;
 use App\Models\Client;
 use App\Models\EmployeeRequest;
 use App\Models\Expense;
@@ -59,7 +60,89 @@ class OwnerUiController extends Controller
             'closingAlert' => $closingAlert,
             'agencies' => Agency::where('pressing_id', $user->pressing_id)->orderBy('name')->get(),
             'selectedAgencyId' => $selectedAgencyId,
+            'pressing' => $pressing,
         ]);
+    }
+
+    public function toggleCashClosureModule()
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing->update(['module_cash_closure_enabled' => ! $pressing->module_cash_closure_enabled]);
+
+        return redirect()->route('owner.ui.dashboard')->with('success', $pressing->module_cash_closure_enabled
+            ? 'Module Clôture de caisse activé.'
+            : 'Module Clôture de caisse désactivé.');
+    }
+
+    public function cashClosures(Request $request)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if(! $pressing->module_cash_closure_enabled, 403, 'Module Clôture de caisse non activé.');
+
+        $closureDate = $request->query('closure_date', now()->toDateString());
+
+        return view('owner.cash-closures', [
+            'closureDate' => $closureDate,
+            'agencies' => Agency::where('pressing_id', Auth::user()->pressing_id)->orderBy('name')->get(),
+            'employees' => User::where('pressing_id', Auth::user()->pressing_id)->where('role', User::ROLE_EMPLOYEE)->orderBy('name')->get(),
+            'closures' => CashClosure::where('pressing_id', Auth::user()->pressing_id)
+                ->with(['agency', 'employee', 'closedBy'])
+                ->latest('closed_at')
+                ->latest()
+                ->get(),
+        ]);
+    }
+
+    public function storeCashClosure(Request $request)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if(! $pressing->module_cash_closure_enabled, 403, 'Module Clôture de caisse non activé.');
+
+        $data = $request->validate([
+            'closure_date' => ['required', 'date'],
+            'agency_id' => ['nullable', 'exists:agencies,id'],
+            'employee_id' => ['nullable', 'exists:users,id'],
+            'note' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $transactions = Transaction::where('pressing_id', Auth::user()->pressing_id)
+            ->where('is_cancelled', false)
+            ->whereDate('happened_at', $data['closure_date']);
+
+        $agencyId = $data['agency_id'] ?? null;
+        if ($agencyId) {
+            Agency::where('id', $agencyId)->where('pressing_id', Auth::user()->pressing_id)->firstOrFail();
+            $transactions->where('agency_id', $agencyId);
+        }
+
+        $employeeId = $data['employee_id'] ?? null;
+        if ($employeeId) {
+            User::where('id', $employeeId)
+                ->where('pressing_id', Auth::user()->pressing_id)
+                ->where('role', User::ROLE_EMPLOYEE)
+                ->firstOrFail();
+            $transactions->where('user_id', $employeeId);
+        }
+
+        $encaissement = (clone $transactions)->where('type', 'encaissement')->sum('amount');
+        $paiement = (clone $transactions)->where('type', 'paiement')->sum('amount');
+        $count = (clone $transactions)->count();
+
+        CashClosure::create([
+            'pressing_id' => Auth::user()->pressing_id,
+            'agency_id' => $agencyId,
+            'employee_id' => $employeeId,
+            'closed_by_user_id' => Auth::id(),
+            'closure_date' => $data['closure_date'],
+            'encaissement_total' => $encaissement,
+            'paiement_total' => $paiement,
+            'net_total' => (float) $encaissement - (float) $paiement,
+            'transactions_count' => $count,
+            'closed_at' => now(),
+            'note' => $data['note'] ?? null,
+        ]);
+
+        return redirect()->route('owner.ui.cash-closures')->with('success', 'Clôture de caisse enregistrée.');
     }
 
     public function agencies()
