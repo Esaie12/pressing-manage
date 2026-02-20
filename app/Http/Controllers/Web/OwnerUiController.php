@@ -11,6 +11,8 @@ use App\Models\CategoryExpense;
 use App\Models\CashClosure;
 use App\Models\CashClosureEntry;
 use App\Models\Client;
+use App\Models\CustomPackPricingSetting;
+use App\Models\CustomPackRequest;
 use App\Models\EmployeeRequest;
 use App\Models\Expense;
 use App\Models\Invoice;
@@ -730,7 +732,16 @@ class OwnerUiController extends Controller
             'address' => ['nullable', 'string', 'max:255'],
         ]);
 
-        Agency::create($data + ['pressing_id' => Auth::user()->pressing_id, 'is_active' => true]);
+        $pressingId = Auth::user()->pressing_id;
+        $plan = $this->activePlan($pressingId);
+        if ($plan) {
+            $agenciesCount = Agency::where('pressing_id', $pressingId)->count();
+            if ($agenciesCount >= (int) $plan->max_agencies) {
+                return redirect()->route('owner.ui.agencies')->with('error', "Limite d'agences atteinte pour votre pack actuel.");
+            }
+        }
+
+        Agency::create($data + ['pressing_id' => $pressingId, 'is_active' => true]);
 
         return redirect()->route('owner.ui.agencies')->with('success', 'Agence créée.');
     }
@@ -767,8 +778,17 @@ class OwnerUiController extends Controller
             'address' => ['nullable', 'string', 'max:255'],
         ]);
 
+        $pressingId = Auth::user()->pressing_id;
+        $plan = $this->activePlan($pressingId);
+        if ($plan) {
+            $employeesCount = User::where('pressing_id', $pressingId)->where('role', User::ROLE_EMPLOYEE)->count();
+            if ($employeesCount >= (int) $plan->max_employees) {
+                return redirect()->route('owner.ui.employees')->with('error', "Limite d'employés atteinte pour votre pack actuel.");
+            }
+        }
+
         $agency = Agency::where('id', $data['agency_id'])
-            ->where('pressing_id', Auth::user()->pressing_id)
+            ->where('pressing_id', $pressingId)
             ->where('is_active', true)
             ->firstOrFail();
 
@@ -778,7 +798,7 @@ class OwnerUiController extends Controller
             'password' => Hash::make($data['password']),
             'role' => User::ROLE_EMPLOYEE,
             'is_active' => true,
-            'pressing_id' => Auth::user()->pressing_id,
+            'pressing_id' => $pressingId,
             'agency_id' => $agency->id,
             'gender' => $data['gender'] ?? null,
             'phone' => $data['phone'] ?? null,
@@ -1213,6 +1233,7 @@ class OwnerUiController extends Controller
         return view('owner.pricing', [
             'plans' => SubscriptionPlan::orderBy('monthly_price')->get(),
             'currentSubscription' => $currentSubscription,
+            'customPricing' => CustomPackPricingSetting::query()->latest()->first() ?? new CustomPackPricingSetting(),
         ]);
     }
 
@@ -1226,6 +1247,28 @@ class OwnerUiController extends Controller
         $start = now()->startOfDay();
         $end = $data['billing_cycle'] === 'monthly' ? now()->addMonth()->endOfDay() : now()->addYear()->endOfDay();
 
+        $plan = SubscriptionPlan::findOrFail($data['subscription_plan_id']);
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+
+        $agenciesCount = Agency::where('pressing_id', $pressing->id)->count();
+        $employeesCount = User::where('pressing_id', $pressing->id)->where('role', User::ROLE_EMPLOYEE)->count();
+        if ($agenciesCount > (int) $plan->max_agencies) {
+            return redirect()->route('owner.ui.pricing')->with('error', "Ce pack ne couvre pas votre nombre actuel d'agences.");
+        }
+        if ($employeesCount > (int) $plan->max_employees) {
+            return redirect()->route('owner.ui.pricing')->with('error', "Ce pack ne couvre pas votre nombre actuel d'employés.");
+        }
+
+        if ($pressing->module_cash_closure_enabled && ! $plan->allow_cash_closure_module) {
+            return redirect()->route('owner.ui.pricing')->with('error', 'Désactivez le module Clôture de caisse avant de prendre ce pack.');
+        }
+        if ($pressing->module_accounting_enabled && ! $plan->allow_accounting_module) {
+            return redirect()->route('owner.ui.pricing')->with('error', 'Désactivez le module Comptabilité avant de prendre ce pack.');
+        }
+        if ($pressing->module_stock_enabled && ! $plan->allow_stock_module) {
+            return redirect()->route('owner.ui.pricing')->with('error', 'Désactivez le module Stock avant de prendre ce pack.');
+        }
+
         OwnerSubscription::where('pressing_id', Auth::user()->pressing_id)->where('is_active', true)->update(['is_active' => false]);
 
         OwnerSubscription::create([
@@ -1237,20 +1280,63 @@ class OwnerUiController extends Controller
             'is_active' => true,
         ]);
 
-        $plan = SubscriptionPlan::findOrFail($data['subscription_plan_id']);
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
-        if (! $plan->allow_cash_closure_module && $pressing->module_cash_closure_enabled) {
-            $pressing->module_cash_closure_enabled = false;
-        }
-        if (! $plan->allow_accounting_module && $pressing->module_accounting_enabled) {
-            $pressing->module_accounting_enabled = false;
-        }
-        if (! $plan->allow_stock_module && $pressing->module_stock_enabled) {
-            $pressing->module_stock_enabled = false;
-        }
-        $pressing->save();
-
         return redirect()->route('owner.ui.pricing')->with('success', 'Souscription effectuée avec succès.');
+    }
+
+    public function storeCustomPackRequest(Request $request)
+    {
+        $data = $request->validate([
+            'requested_agencies' => ['required', 'integer', 'min:1'],
+            'requested_employees' => ['required', 'integer', 'min:1'],
+            'want_stock_module' => ['nullable', 'boolean'],
+            'want_accounting_module' => ['nullable', 'boolean'],
+            'want_cash_closure_module' => ['nullable', 'boolean'],
+            'want_customization' => ['nullable', 'boolean'],
+            'note' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $pricing = CustomPackPricingSetting::query()->latest()->first();
+        abort_unless($pricing, 422, "La tarification des packs personnalisés n'est pas encore configurée.");
+
+        $estimated = (float) $pricing->base_price;
+        $agencies = (int) $data['requested_agencies'];
+        $employees = (int) $data['requested_employees'];
+
+        $estimated += $agencies <= 4 ? (float) $pricing->price_agencies_1_4 : ($agencies <= 10 ? (float) $pricing->price_agencies_5_10 : (float) $pricing->price_agencies_11_plus);
+        $estimated += $employees <= 5 ? (float) $pricing->price_employees_1_5 : ($employees <= 20 ? (float) $pricing->price_employees_6_20 : (float) $pricing->price_employees_21_plus);
+
+        $wantStock = (bool) ($data['want_stock_module'] ?? false);
+        $wantAccounting = (bool) ($data['want_accounting_module'] ?? false);
+        $wantCash = (bool) ($data['want_cash_closure_module'] ?? false);
+        $wantCustom = (bool) ($data['want_customization'] ?? false);
+
+        if ($wantStock) {
+            $estimated += (float) $pricing->price_module_stock;
+        }
+        if ($wantAccounting) {
+            $estimated += (float) $pricing->price_module_accounting;
+        }
+        if ($wantCash) {
+            $estimated += (float) $pricing->price_module_cash_closure;
+        }
+        if ($wantCustom) {
+            $estimated += (float) $pricing->price_customization;
+        }
+
+        CustomPackRequest::create([
+            'pressing_id' => Auth::user()->pressing_id,
+            'requested_agencies' => $agencies,
+            'requested_employees' => $employees,
+            'want_stock_module' => $wantStock,
+            'want_accounting_module' => $wantAccounting,
+            'want_cash_closure_module' => $wantCash,
+            'want_customization' => $wantCustom,
+            'estimated_price' => $estimated,
+            'note' => $data['note'] ?? null,
+            'status' => 'pending',
+        ]);
+
+        return redirect()->route('owner.ui.pricing')->with('success', 'Demande de pack personnalisé envoyée. Prix estimé: '.number_format($estimated, 0, ',', ' ').' FCFA.');
     }
 
     public function stats(Request $request)
@@ -1672,7 +1758,7 @@ class OwnerUiController extends Controller
         $balance->update(['quantity' => $next]);
     }
 
-    private function planAllows(int $pressingId, string $feature): bool
+    private function activePlan(int $pressingId): ?SubscriptionPlan
     {
         $subscription = OwnerSubscription::where('pressing_id', $pressingId)
             ->where('is_active', true)
@@ -1681,11 +1767,17 @@ class OwnerUiController extends Controller
             ->latest('ends_at')
             ->first();
 
-        if (! $subscription || ! $subscription->plan) {
+        return $subscription?->plan;
+    }
+
+    private function planAllows(int $pressingId, string $feature): bool
+    {
+        $plan = $this->activePlan($pressingId);
+        if (! $plan) {
             return true;
         }
 
-        return (bool) ($subscription->plan->{$feature} ?? true);
+        return (bool) ($plan->{$feature} ?? true);
     }
 
     private function canCancelTransaction(Pressing $pressing, Transaction $transaction): bool

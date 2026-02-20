@@ -62,4 +62,28 @@
     </div>
   </div>
 </div>
+
+
+<div class="card shadow-sm">
+  <div class="card-header">Demande de pack personnalisé</div>
+  <div class="card-body">
+    <form method="POST" action="{{ route('owner.ui.pricing.custom-request.store') }}" class="row g-2">
+      @csrf
+      <div class="col-md-3"><label class="form-label">Agences souhaitées</label><input class="form-control" type="number" min="1" name="requested_agencies" value="1" required></div>
+      <div class="col-md-3"><label class="form-label">Employés souhaités</label><input class="form-control" type="number" min="1" name="requested_employees" value="5" required></div>
+      <div class="col-md-6"><label class="form-label">Note</label><input class="form-control" name="note" placeholder="Décrivez vos besoins"></div>
+      <div class="col-12 d-flex flex-wrap gap-3">
+        <div class="form-check"><input class="form-check-input" type="checkbox" name="want_stock_module" value="1" id="want_stock"><label class="form-check-label" for="want_stock">Module Stock (+{{ number_format((float)($customPricing->price_module_stock ?? 0),0,',',' ') }} FCFA)</label></div>
+        <div class="form-check"><input class="form-check-input" type="checkbox" name="want_accounting_module" value="1" id="want_acc"><label class="form-check-label" for="want_acc">Module Comptabilité (+{{ number_format((float)($customPricing->price_module_accounting ?? 0),0,',',' ') }} FCFA)</label></div>
+        <div class="form-check"><input class="form-check-input" type="checkbox" name="want_cash_closure_module" value="1" id="want_cash"><label class="form-check-label" for="want_cash">Module Clôture caisse (+{{ number_format((float)($customPricing->price_module_cash_closure ?? 0),0,',',' ') }} FCFA)</label></div>
+        <div class="form-check"><input class="form-check-input" type="checkbox" name="want_customization" value="1" id="want_custom"><label class="form-check-label" for="want_custom">Personnalisation (+{{ number_format((float)($customPricing->price_customization ?? 0),0,',',' ') }} FCFA)</label></div>
+      </div>
+      <div class="col-12 small text-muted">
+        Prix de base: {{ number_format((float)($customPricing->base_price ?? 0),0,',',' ') }} FCFA (estimation finale calculée à l'envoi selon les tranches agences/employés).
+      </div>
+      <div class="col-12"><button class="btn btn-outline-primary">Envoyer ma demande personnalisée</button></div>
+    </form>
+  </div>
+</div>
+
 @endsection

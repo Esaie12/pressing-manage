@@ -51,6 +51,7 @@ Route::middleware(['auth', RoleMiddleware::class.':admin'])->prefix('admin')->gr
     Route::get('/ui/pricing', [AdminUiController::class, 'pricing'])->name('admin.ui.pricing');
     Route::post('/ui/pricing', [AdminUiController::class, 'storePlan'])->name('admin.ui.pricing.store');
     Route::post('/ui/pricing/{plan}', [AdminUiController::class, 'updatePlan'])->name('admin.ui.pricing.update');
+    Route::post('/ui/pricing/custom-pack', [AdminUiController::class, 'saveCustomPackPricing'])->name('admin.ui.pricing.custom-pack.save');
 });
 
 Route::middleware(['auth', RoleMiddleware::class.':owner'])->prefix('owner')->group(function () {
@@ -125,6 +126,7 @@ Route::middleware(['auth', RoleMiddleware::class.':owner'])->prefix('owner')->gr
 
     Route::get('/ui/pricing', [OwnerUiController::class, 'pricing'])->name('owner.ui.pricing');
     Route::post('/ui/pricing/subscribe', [OwnerUiController::class, 'subscribePlan'])->name('owner.ui.pricing.subscribe');
+    Route::post('/ui/pricing/custom-request', [OwnerUiController::class, 'storeCustomPackRequest'])->name('owner.ui.pricing.custom-request.store');
 
     Route::get('/ui/accounting/settings', [OwnerUiController::class, 'accountingSettings'])->name('owner.ui.accounting.settings');
     Route::post('/ui/accounting/settings', [OwnerUiController::class, 'saveAccountingSettings'])->name('owner.ui.accounting.settings.save');
