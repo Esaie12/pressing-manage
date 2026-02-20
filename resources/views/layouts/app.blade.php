@@ -66,12 +66,15 @@
                         </ul>
                     </li>
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {{ request()->routeIs('owner.ui.stats*','owner.ui.expenses*','owner.ui.pricing*') ? 'active fw-semibold' : '' }}" href="#" role="button" data-bs-toggle="dropdown">Pilotage</a>
+                        <a class="nav-link dropdown-toggle {{ request()->routeIs('owner.ui.stats*','owner.ui.expenses*','owner.ui.pricing*','owner.ui.stocks*') ? 'active fw-semibold' : '' }}" href="#" role="button" data-bs-toggle="dropdown">Pilotage</a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ route('owner.ui.stats') }}">Statistiques</a></li>
                             <li><a class="dropdown-item" href="{{ route('owner.ui.expenses') }}">Dépenses</a></li>
                             @if($ownerPressing?->module_cash_closure_enabled)
                                 <li><a class="dropdown-item" href="{{ route('owner.ui.cash-closures') }}">Clôture de caisse</a></li>
+                            @endif
+                            @if($ownerPressing?->module_stock_enabled)
+                                <li><a class="dropdown-item" href="{{ route('owner.ui.stocks') }}">Stock</a></li>
                             @endif
                         </ul>
                     </li>
@@ -102,11 +105,14 @@
                     <li class="nav-item"><a class="nav-link {{ request()->routeIs('employee.ui.invoices*') ? 'active fw-semibold' : '' }}" href="{{ route('employee.ui.invoices') }}">Mes factures</a></li>
                     <li class="nav-item"><a class="nav-link {{ request()->routeIs('employee.ui.requests*') ? 'active fw-semibold' : '' }}" href="{{ route('employee.ui.requests') }}">Demandes</a></li>
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {{ request()->routeIs('employee.ui.transactions*','employee.ui.cash-closures*') ? 'active fw-semibold' : '' }}" href="#" role="button" data-bs-toggle="dropdown">Comptabilité</a>
+                        <a class="nav-link dropdown-toggle {{ request()->routeIs('employee.ui.transactions*','employee.ui.cash-closures*','employee.ui.stock.daily') ? 'active fw-semibold' : '' }}" href="#" role="button" data-bs-toggle="dropdown">Comptabilité</a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ route('employee.ui.transactions') }}">Transactions</a></li>
                             @if(auth()->user()->pressing?->module_cash_closure_enabled)
                                 <li><a class="dropdown-item" href="{{ route('employee.ui.cash-closures') }}">Clôture</a></li>
+                            @endif
+                            @if(auth()->user()->pressing?->module_stock_enabled)
+                                <li><a class="dropdown-item" href="{{ route('employee.ui.stock.daily') }}">Bilan stock du jour</a></li>
                             @endif
                         </ul>
                     </li>

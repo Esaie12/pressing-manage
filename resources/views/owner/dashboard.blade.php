@@ -59,6 +59,35 @@
     </div>
   </div>
 
+
+
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-body d-flex flex-column gap-2">
+        <h5 class="mb-0">Module Stock (mouvements + bilan employé)</h5>
+        <div class="text-muted small">Activez ce module pour gérer les entrées/sorties/transferts/ajustements/pertes. Le mode de stock est choisi une seule fois.</div>
+        <div class="mt-2 d-flex gap-2 align-items-center flex-wrap">
+          <form method="POST" action="{{ route('owner.ui.modules.stock.toggle') }}" class="d-flex gap-2 align-items-center flex-wrap">
+            @csrf
+            @if(!optional($pressing)->stock_mode)
+              <select class="form-select" name="stock_mode" required style="min-width:280px;">
+                <option value="">Choisir le mode de stock...</option>
+                <option value="central">Magasin central → Agences</option>
+                <option value="agency">Stock par agence (sans central)</option>
+              </select>
+            @else
+              <span class="badge text-bg-light border">Mode: {{ optional($pressing)->stock_mode === 'central' ? 'Magasin central → Agences' : 'Stock par agence' }}</span>
+            @endif
+            <button class="btn btn-{{ optional($pressing)->module_stock_enabled ? 'outline-danger' : 'primary' }}">{{ optional($pressing)->module_stock_enabled ? 'Désactiver' : 'Activer' }}</button>
+          </form>
+          @if(optional($pressing)->module_stock_enabled)
+            <a href="{{ route('owner.ui.stocks') }}" class="btn btn-outline-primary">Gérer le stock</a>
+          @endif
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="col-lg-6">
     <div class="card shadow-sm h-100">
       <div class="card-body d-flex flex-column gap-2">

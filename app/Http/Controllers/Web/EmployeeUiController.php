@@ -14,6 +14,7 @@ use App\Models\OrderStatus;
 use App\Models\OrderItem;
 use App\Models\Pressing;
 use App\Models\Service;
+use App\Models\StockMovement;
 use App\Models\User;
 use App\Models\UserNotification;
 use App\Models\Transaction;
@@ -104,6 +105,117 @@ class EmployeeUiController extends Controller
                 ->latest('closed_at')
                 ->latest()
                 ->get(),
+        ]);
+    }
+
+    public function storeCashClosure(Request $request)
+    {
+        $employee = Auth::user();
+        abort_unless($employee->is_active, 403);
+        $pressing = Pressing::findOrFail($employee->pressing_id);
+        abort_if(! $pressing->module_cash_closure_enabled, 403, 'Module Clôture de caisse non activé.');
+
+        $data = $request->validate([
+            'closure_date' => ['required', 'date'],
+            'note' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $closureTime = now();
+        if ($pressing->closing_time) {
+            $closingTime = now()->setTimeFromTimeString($pressing->closing_time);
+            $allowedAt = $closingTime->copy()->subMinutes(30);
+            if ($closureTime->lt($allowedAt)) {
+                return redirect()->route('employee.ui.cash-closures')
+                    ->with('error', 'Clôture possible uniquement à partir de '.$allowedAt->format('H:i').'.');
+            }
+        }
+
+        $transactions = Transaction::where('pressing_id', $employee->pressing_id)
+            ->where('agency_id', $employee->agency_id)
+            ->where('user_id', $employee->id)
+            ->where('is_cancelled', false)
+            ->whereDate('happened_at', $data['closure_date'])
+            ->with('order')
+            ->get();
+
+        $encaissement = (float) $transactions->where('type', 'encaissement')->sum('amount');
+        $paiement = (float) $transactions->where('type', 'paiement')->sum('amount');
+
+        DB::transaction(function () use ($employee, $data, $transactions, $encaissement, $paiement, $closureTime) {
+            $closure = CashClosure::create([
+                'pressing_id' => $employee->pressing_id,
+                'agency_id' => $employee->agency_id,
+                'employee_id' => $employee->id,
+                'closed_by_user_id' => $employee->id,
+                'closure_date' => $data['closure_date'],
+                'encaissement_total' => $encaissement,
+                'paiement_total' => $paiement,
+                'net_total' => $encaissement - $paiement,
+                'transactions_count' => $transactions->count(),
+                'closed_at' => $closureTime,
+                'note' => $data['note'] ?? null,
+            ]);
+
+            foreach ($transactions as $tx) {
+                CashClosureEntry::create([
+                    'cash_closure_id' => $closure->id,
+                    'transaction_id' => $tx->id,
+                    'user_id' => $tx->user_id,
+                    'transaction_type' => $tx->type,
+                    'amount' => $tx->amount,
+                    'payment_method' => $tx->payment_method,
+                    'label' => $tx->label,
+                    'order_reference' => $tx->order?->reference,
+                    'happened_at' => $tx->happened_at,
+                ]);
+            }
+        });
+
+        return redirect()->route('employee.ui.cash-closures')->with('success', 'Clôture effectuée avec succès.');
+    }
+
+    public function showCashClosure(CashClosure $cashClosure)
+    {
+        $employee = Auth::user();
+        abort_unless($employee->is_active, 403);
+        abort_unless($cashClosure->pressing_id === $employee->pressing_id && $cashClosure->agency_id === $employee->agency_id && $cashClosure->employee_id === $employee->id, 403);
+
+        $cashClosure->load(['entries.user']);
+
+        return view('employee.cash-closure-show', ['closure' => $cashClosure]);
+    }
+
+
+    public function stockDailyReport(Request $request)
+    {
+        $employee = Auth::user();
+        abort_unless($employee->is_active, 403);
+        abort_if(! $employee->pressing?->module_stock_enabled, 403, 'Module Stock non activé.');
+
+        $date = $request->query('movement_date', now()->toDateString());
+
+        $outgoing = StockMovement::where('pressing_id', $employee->pressing_id)
+            ->where('user_id', $employee->id)
+            ->whereDate('movement_date', $date)
+            ->where(function ($q) use ($employee) {
+                $q->whereIn('movement_type', ['sortie', 'perte_casse'])
+                    ->orWhere(function ($qq) use ($employee) {
+                        $qq->where('movement_type', 'transfert')->where('source_agency_id', $employee->agency_id);
+                    })
+                    ->orWhere(function ($qq) use ($employee) {
+                        $qq->where('movement_type', 'ajustement')
+                            ->where('agency_id', $employee->agency_id)
+                            ->where('note', 'like', '%Ajustement -%');
+                    });
+            })
+            ->with(['item', 'sourceAgency', 'targetAgency'])
+            ->latest('created_at')
+            ->get();
+
+        return view('employee.stock-daily', [
+            'movementDate' => $date,
+            'outgoing' => $outgoing,
+            'totalOutgoing' => (float) $outgoing->sum('quantity'),
         ]);
     }
 

@@ -20,6 +20,9 @@ use App\Models\OrderItem;
 use App\Models\OwnerSubscription;
 use App\Models\Pressing;
 use App\Models\Service;
+use App\Models\StockMovement;
+use App\Models\StockItem;
+use App\Models\StockBalance;
 use App\Models\SubscriptionPlan;
 use App\Models\Transaction;
 use App\Models\User;
@@ -88,6 +91,171 @@ class OwnerUiController extends Controller
             : 'Module Comptabilité désactivé.');
     }
 
+
+    public function toggleStockModule(Request $request)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+
+        if (! $pressing->module_stock_enabled && ! $pressing->stock_mode) {
+            $data = $request->validate([
+                'stock_mode' => ['required', 'in:central,agency'],
+            ]);
+            $pressing->update([
+                'module_stock_enabled' => true,
+                'stock_mode' => $data['stock_mode'],
+            ]);
+
+            return redirect()->route('owner.ui.dashboard')->with('success', 'Module Stock activé en mode '.($data['stock_mode'] === 'central' ? 'Magasin central → Agences' : 'Stock par agence').'.');
+        }
+
+        $pressing->update(['module_stock_enabled' => ! $pressing->module_stock_enabled]);
+
+        return redirect()->route('owner.ui.dashboard')->with('success', $pressing->module_stock_enabled
+            ? 'Module Stock activé.'
+            : 'Module Stock désactivé.');
+    }
+
+    public function stocks(Request $request)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if(! $pressing->module_stock_enabled, 403, 'Module Stock non activé.');
+
+        $agencyId = $request->query('agency_id');
+        $date = $request->query('movement_date', now()->toDateString());
+
+        $movements = StockMovement::where('pressing_id', $pressing->id)
+            ->with(['item', 'user', 'agency', 'sourceAgency', 'targetAgency'])
+            ->when($agencyId, fn ($q) => $q->where(function ($qq) use ($agencyId) {
+                $qq->where('agency_id', $agencyId)
+                    ->orWhere('source_agency_id', $agencyId)
+                    ->orWhere('target_agency_id', $agencyId);
+            }))
+            ->latest('movement_date')
+            ->latest()
+            ->limit(100)
+            ->get();
+
+        $balances = StockBalance::where('pressing_id', $pressing->id)
+            ->with(['item', 'agency'])
+            ->orderByDesc('agency_id')
+            ->get();
+
+        return view('owner.stocks', [
+            'pressing' => $pressing,
+            'agencies' => Agency::where('pressing_id', $pressing->id)->orderBy('name')->get(),
+            'items' => StockItem::where('pressing_id', $pressing->id)->where('is_active', true)->orderBy('name')->get(),
+            'movements' => $movements,
+            'balances' => $balances,
+            'selectedAgencyId' => $agencyId,
+            'selectedDate' => $date,
+        ]);
+    }
+
+    public function storeStockItem(Request $request)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if(! $pressing->module_stock_enabled, 403, 'Module Stock non activé.');
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'sku' => ['nullable', 'string', 'max:80'],
+            'unit' => ['nullable', 'string', 'max:20'],
+        ]);
+
+        StockItem::create([
+            'pressing_id' => $pressing->id,
+            'name' => $data['name'],
+            'sku' => $data['sku'] ?? null,
+            'unit' => $data['unit'] ?? 'unité',
+            'is_active' => true,
+        ]);
+
+        return redirect()->route('owner.ui.stocks')->with('success', 'Article de stock ajouté.');
+    }
+
+    public function storeStockMovement(Request $request)
+    {
+        $owner = Auth::user();
+        $pressing = Pressing::findOrFail($owner->pressing_id);
+        abort_if(! $pressing->module_stock_enabled, 403, 'Module Stock non activé.');
+
+        $data = $request->validate([
+            'stock_item_id' => ['required', 'exists:stock_items,id'],
+            'movement_type' => ['required', 'in:entree,sortie,transfert,ajustement,perte_casse'],
+            'quantity' => ['required', 'numeric', 'gt:0'],
+            'movement_date' => ['required', 'date'],
+            'agency_id' => ['nullable', 'exists:agencies,id'],
+            'source_agency_id' => ['nullable', 'exists:agencies,id'],
+            'target_agency_id' => ['nullable', 'exists:agencies,id'],
+            'adjustment_sign' => ['nullable', 'in:plus,minus'],
+            'note' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $item = StockItem::where('id', $data['stock_item_id'])->where('pressing_id', $pressing->id)->firstOrFail();
+        $qty = (float) $data['quantity'];
+
+        $resolveAgency = function ($agencyId) use ($pressing) {
+            if (! $agencyId) {
+                return null;
+            }
+
+            return Agency::where('id', $agencyId)->where('pressing_id', $pressing->id)->firstOrFail()->id;
+        };
+
+        $agencyId = $resolveAgency($data['agency_id'] ?? null);
+        $sourceAgencyId = $resolveAgency($data['source_agency_id'] ?? null);
+        $targetAgencyId = $resolveAgency($data['target_agency_id'] ?? null);
+
+        if ($pressing->stock_mode === 'agency' && $data['movement_type'] === 'transfert') {
+            return redirect()->route('owner.ui.stocks')->with('error', 'Le mode Stock par agence ne permet pas les transferts centralisés.');
+        }
+
+        if ($pressing->stock_mode === 'agency' && ! $agencyId && $data['movement_type'] !== 'transfert') {
+            return redirect()->route('owner.ui.stocks')->with('error', 'En mode Stock par agence, vous devez choisir une agence.');
+        }
+
+        if ($pressing->stock_mode === 'central' && $data['movement_type'] === 'transfert') {
+            if ($sourceAgencyId && $targetAgencyId) {
+                return redirect()->route('owner.ui.stocks')->with('error', 'Transfert agence → agence interdit. Utilisez magasin central ↔ agence.');
+            }
+            if (! $sourceAgencyId && ! $targetAgencyId) {
+                return redirect()->route('owner.ui.stocks')->with('error', 'Choisissez une source ou une destination agence pour le transfert.');
+            }
+        }
+
+        DB::transaction(function () use ($pressing, $owner, $item, $data, $qty, $agencyId, $sourceAgencyId, $targetAgencyId) {
+            $movement = StockMovement::create([
+                'pressing_id' => $pressing->id,
+                'stock_item_id' => $item->id,
+                'user_id' => $owner->id,
+                'agency_id' => $agencyId,
+                'source_agency_id' => $sourceAgencyId,
+                'target_agency_id' => $targetAgencyId,
+                'movement_type' => $data['movement_type'],
+                'quantity' => $qty,
+                'note' => $data['note'] ?? null,
+                'movement_date' => $data['movement_date'],
+            ]);
+
+            if ($data['movement_type'] === 'entree') {
+                $this->adjustStockBalance($pressing->id, $item->id, $agencyId, $qty);
+            } elseif ($data['movement_type'] === 'sortie' || $data['movement_type'] === 'perte_casse') {
+                $this->adjustStockBalance($pressing->id, $item->id, $agencyId, -$qty);
+            } elseif ($data['movement_type'] === 'ajustement') {
+                $sign = $data['adjustment_sign'] ?? 'plus';
+                $delta = $sign === 'minus' ? -$qty : $qty;
+                $movement->note = trim(($movement->note ? $movement->note.' | ' : '').'Ajustement '.($sign === 'minus' ? '-' : '+'));
+                $movement->save();
+                $this->adjustStockBalance($pressing->id, $item->id, $agencyId, $delta);
+            } elseif ($data['movement_type'] === 'transfert') {
+                $this->adjustStockBalance($pressing->id, $item->id, $sourceAgencyId, -$qty);
+                $this->adjustStockBalance($pressing->id, $item->id, $targetAgencyId, $qty);
+            }
+        });
+
+        return redirect()->route('owner.ui.stocks')->with('success', 'Mouvement de stock enregistré.');
+    }
+
     public function accountingSettings(Request $request)
     {
         $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
@@ -103,6 +271,94 @@ class OwnerUiController extends Controller
             'agencies' => Agency::where('pressing_id', $pressing->id)->orderBy('name')->get(),
             'selectedAgencyId' => $agencyId,
             'setup' => $setup,
+        ]);
+    }
+
+    public function saveAccountingSettings(Request $request)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if(! $pressing->module_accounting_enabled, 403, 'Module Comptabilité non activé.');
+
+        $data = $request->validate([
+            'agency_id' => ['nullable', 'exists:agencies,id'],
+            'capital' => ['nullable', 'numeric', 'min:0'],
+            'reserves' => ['nullable', 'numeric', 'min:0'],
+            'retained_earnings' => ['nullable', 'numeric'],
+            'intangible_assets' => ['nullable', 'numeric', 'min:0'],
+            'tangible_assets' => ['nullable', 'numeric', 'min:0'],
+            'financial_assets' => ['nullable', 'numeric', 'min:0'],
+            'stocks' => ['nullable', 'numeric', 'min:0'],
+            'receivables' => ['nullable', 'numeric', 'min:0'],
+            'treasury' => ['nullable', 'numeric', 'min:0'],
+            'financial_debts' => ['nullable', 'numeric', 'min:0'],
+            'operating_debts' => ['nullable', 'numeric', 'min:0'],
+            'fixed_asset_debts' => ['nullable', 'numeric', 'min:0'],
+            'other_debts' => ['nullable', 'numeric', 'min:0'],
+            'employee_salaries' => ['nullable', 'numeric', 'min:0'],
+            'notes' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $agencyId = $data['agency_id'] ?? null;
+        if ($agencyId) {
+            Agency::where('id', $agencyId)->where('pressing_id', $pressing->id)->firstOrFail();
+        }
+
+        AccountingSetup::updateOrCreate(
+            ['pressing_id' => $pressing->id, 'agency_id' => $agencyId],
+            [
+                'capital' => (float) ($data['capital'] ?? 0),
+                'reserves' => (float) ($data['reserves'] ?? 0),
+                'retained_earnings' => (float) ($data['retained_earnings'] ?? 0),
+                'intangible_assets' => (float) ($data['intangible_assets'] ?? 0),
+                'tangible_assets' => (float) ($data['tangible_assets'] ?? 0),
+                'financial_assets' => (float) ($data['financial_assets'] ?? 0),
+                'stocks' => (float) ($data['stocks'] ?? 0),
+                'receivables' => (float) ($data['receivables'] ?? 0),
+                'treasury' => (float) ($data['treasury'] ?? 0),
+                'financial_debts' => (float) ($data['financial_debts'] ?? 0),
+                'operating_debts' => (float) ($data['operating_debts'] ?? 0),
+                'fixed_asset_debts' => (float) ($data['fixed_asset_debts'] ?? 0),
+                'other_debts' => (float) ($data['other_debts'] ?? 0),
+                'employee_salaries' => (float) ($data['employee_salaries'] ?? 0),
+                'notes' => $data['notes'] ?? null,
+            ]
+        );
+
+        return redirect()->route('owner.ui.accounting.settings', ['agency_id' => $agencyId])->with('success', 'Paramètres de comptabilité enregistrés.');
+    }
+
+    public function accountingReports(Request $request)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if(! $pressing->module_accounting_enabled, 403, 'Module Comptabilité non activé.');
+
+        $month = $request->query('month', now()->startOfMonth()->toDateString());
+        $agencyId = $request->query('agency_id');
+
+        $preview = $this->buildAccountingPreview($pressing->id, $month, $agencyId);
+
+        return view('owner.accounting-reports', [
+            'month' => $month,
+            'agencyId' => $agencyId,
+            'agencies' => Agency::where('pressing_id', $pressing->id)->orderBy('name')->get(),
+            'preview' => $preview,
+            'savedReports' => AccountingReport::where('pressing_id', $pressing->id)
+                ->with('agency')
+                ->latest('saved_at')
+                ->latest()
+                ->get(),
+        ]);
+    }
+
+    public function saveAccountingReport(Request $request)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if(! $pressing->module_accounting_enabled, 403, 'Module Comptabilité non activé.');
+
+        $data = $request->validate([
+            'month' => ['required', 'date'],
+            'agency_id' => ['nullable', 'exists:agencies,id'],
+            'note' => ['nullable', 'string', 'max:2000'],
         ]);
 
         $agencyId = $data['agency_id'] ?? null;
@@ -154,7 +410,84 @@ class OwnerUiController extends Controller
         return view('owner.accounting-report-show', ['report' => $report]);
     }
 
-    
+    private function buildAccountingPreview(int $pressingId, string $month, ?string $agencyId): array
+    {
+        $monthStart = Carbon::parse($month)->startOfMonth();
+        $monthEnd = $monthStart->copy()->endOfMonth();
+
+        $transactions = Transaction::where('pressing_id', $pressingId)
+            ->where('is_cancelled', false)
+            ->whereBetween('happened_at', [$monthStart->startOfDay(), $monthEnd->endOfDay()])
+            ->with('order');
+
+        if ($agencyId) {
+            $transactions->where('agency_id', $agencyId);
+        }
+
+        $txList = $transactions->get();
+        $credits = (float) $txList->where('type', 'encaissement')->sum('amount');
+        $debitsTx = (float) $txList->where('type', 'paiement')->sum('amount');
+
+        $expenseQuery = Expense::where('pressing_id', $pressingId)->whereBetween('expense_date', [$monthStart->toDateString(), $monthEnd->toDateString()]);
+        if ($agencyId) {
+            $expenseQuery->where('agency_id', $agencyId);
+        }
+        $expenses = (float) $expenseQuery->sum('amount');
+
+        $setup = AccountingSetup::where('pressing_id', $pressingId)->where('agency_id', $agencyId)->first();
+        $setupDebits = (float) ($setup?->financial_debts ?? 0) + (float) ($setup?->operating_debts ?? 0) + (float) ($setup?->fixed_asset_debts ?? 0) + (float) ($setup?->other_debts ?? 0) + (float) ($setup?->employee_salaries ?? 0);
+
+        $totalDebits = $debitsTx + $expenses + $setupDebits;
+        $netResult = $credits - $totalDebits;
+
+        $entries = $txList->map(function ($tx) {
+            return [
+                'transaction_id' => $tx->id,
+                'agency_id' => $tx->agency_id,
+                'user_id' => $tx->user_id,
+                'entry_type' => $tx->type,
+                'amount' => (float) $tx->amount,
+                'payment_method' => $tx->payment_method,
+                'label' => $tx->label,
+                'order_reference' => $tx->order?->reference,
+                'happened_at' => $tx->happened_at,
+            ];
+        })->values()->all();
+
+        return [
+            'total_credits' => $credits,
+            'total_debits' => $totalDebits,
+            'net_result' => $netResult,
+            'entries' => $entries,
+            'setup' => $setup,
+            'snapshot' => [
+                'period' => $monthStart->format('Y-m'),
+                'credits' => $credits,
+                'debits_transactions' => $debitsTx,
+                'debits_expenses' => $expenses,
+                'debits_setup' => $setupDebits,
+                'net_result' => $netResult,
+                'assets' => [
+                    'capital' => (float) ($setup?->capital ?? 0),
+                    'reserves' => (float) ($setup?->reserves ?? 0),
+                    'retained_earnings' => (float) ($setup?->retained_earnings ?? 0),
+                    'intangible_assets' => (float) ($setup?->intangible_assets ?? 0),
+                    'tangible_assets' => (float) ($setup?->tangible_assets ?? 0),
+                    'financial_assets' => (float) ($setup?->financial_assets ?? 0),
+                    'stocks' => (float) ($setup?->stocks ?? 0),
+                    'receivables' => (float) ($setup?->receivables ?? 0),
+                    'treasury' => (float) ($setup?->treasury ?? 0),
+                ],
+                'liabilities' => [
+                    'financial_debts' => (float) ($setup?->financial_debts ?? 0),
+                    'operating_debts' => (float) ($setup?->operating_debts ?? 0),
+                    'fixed_asset_debts' => (float) ($setup?->fixed_asset_debts ?? 0),
+                    'other_debts' => (float) ($setup?->other_debts ?? 0),
+                    'employee_salaries' => (float) ($setup?->employee_salaries ?? 0),
+                ],
+            ],
+        ];
+    }
 
     public function cashClosures(Request $request)
     {
@@ -251,82 +584,6 @@ class OwnerUiController extends Controller
         $cashClosure->load(['agency', 'employee', 'closedBy', 'entries.user']);
 
         return view('owner.cash-closure-show', ['closure' => $cashClosure]);
-    }
-
-    public function saveAccountingSettings(Request $request)
-    {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
-        abort_if(! $pressing->module_accounting_enabled, 403, 'Module Comptabilité non activé.');
-
-        $data = $request->validate([
-            'agency_id' => ['nullable', 'exists:agencies,id'],
-            'capital' => ['nullable', 'numeric', 'min:0'],
-            'reserves' => ['nullable', 'numeric', 'min:0'],
-            'retained_earnings' => ['nullable', 'numeric'],
-            'intangible_assets' => ['nullable', 'numeric', 'min:0'],
-            'tangible_assets' => ['nullable', 'numeric', 'min:0'],
-            'financial_assets' => ['nullable', 'numeric', 'min:0'],
-            'stocks' => ['nullable', 'numeric', 'min:0'],
-            'receivables' => ['nullable', 'numeric', 'min:0'],
-            'treasury' => ['nullable', 'numeric', 'min:0'],
-            'financial_debts' => ['nullable', 'numeric', 'min:0'],
-            'operating_debts' => ['nullable', 'numeric', 'min:0'],
-            'fixed_asset_debts' => ['nullable', 'numeric', 'min:0'],
-            'other_debts' => ['nullable', 'numeric', 'min:0'],
-            'employee_salaries' => ['nullable', 'numeric', 'min:0'],
-            'notes' => ['nullable', 'string', 'max:2000'],
-        ]);
-
-        $agencyId = $data['agency_id'] ?? null;
-        if ($agencyId) {
-            Agency::where('id', $agencyId)->where('pressing_id', $pressing->id)->firstOrFail();
-        }
-
-        AccountingSetup::updateOrCreate(
-            ['pressing_id' => $pressing->id, 'agency_id' => $agencyId],
-            [
-                'capital' => (float) ($data['capital'] ?? 0),
-                'reserves' => (float) ($data['reserves'] ?? 0),
-                'retained_earnings' => (float) ($data['retained_earnings'] ?? 0),
-                'intangible_assets' => (float) ($data['intangible_assets'] ?? 0),
-                'tangible_assets' => (float) ($data['tangible_assets'] ?? 0),
-                'financial_assets' => (float) ($data['financial_assets'] ?? 0),
-                'stocks' => (float) ($data['stocks'] ?? 0),
-                'receivables' => (float) ($data['receivables'] ?? 0),
-                'treasury' => (float) ($data['treasury'] ?? 0),
-                'financial_debts' => (float) ($data['financial_debts'] ?? 0),
-                'operating_debts' => (float) ($data['operating_debts'] ?? 0),
-                'fixed_asset_debts' => (float) ($data['fixed_asset_debts'] ?? 0),
-                'other_debts' => (float) ($data['other_debts'] ?? 0),
-                'employee_salaries' => (float) ($data['employee_salaries'] ?? 0),
-                'notes' => $data['notes'] ?? null,
-            ]
-        );
-
-        return redirect()->route('owner.ui.accounting.settings', ['agency_id' => $agencyId])->with('success', 'Paramètres de comptabilité enregistrés.');
-    }
-
-    public function accountingReports(Request $request)
-    {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
-        abort_if(! $pressing->module_accounting_enabled, 403, 'Module Comptabilité non activé.');
-
-        $month = $request->query('month', now()->startOfMonth()->toDateString());
-        $agencyId = $request->query('agency_id');
-
-        $preview = $this->buildAccountingPreview($pressing->id, $month, $agencyId);
-
-        return view('owner.accounting-reports', [
-            'month' => $month,
-            'agencyId' => $agencyId,
-            'agencies' => Agency::where('pressing_id', $pressing->id)->orderBy('name')->get(),
-            'preview' => $preview,
-            'savedReports' => AccountingReport::where('pressing_id', $pressing->id)
-                ->with('agency')
-                ->latest('saved_at')
-                ->latest()
-                ->get(),
-        ]);
     }
 
     public function saveAccountingReport(Request $request)
@@ -1284,6 +1541,22 @@ class OwnerUiController extends Controller
         }
 
         return [$order, $total];
+    }
+
+
+    private function adjustStockBalance(int $pressingId, int $itemId, ?int $agencyId, float $delta): void
+    {
+        $balance = StockBalance::firstOrCreate(
+            ['pressing_id' => $pressingId, 'stock_item_id' => $itemId, 'agency_id' => $agencyId],
+            ['quantity' => 0]
+        );
+
+        $next = (float) $balance->quantity + $delta;
+        if ($next < 0) {
+            abort(422, 'Stock insuffisant pour ce mouvement.');
+        }
+
+        $balance->update(['quantity' => $next]);
     }
 
     private function canCancelTransaction(Pressing $pressing, Transaction $transaction): bool
