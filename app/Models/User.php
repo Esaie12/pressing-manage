@@ -15,7 +15,7 @@ class User extends Authenticatable
     public const ROLE_EMPLOYEE = 'employee';
 
     protected $fillable = [
-        'name', 'email', 'password', 'role', 'is_active', 'pressing_id', 'agency_id'
+        'name', 'email', 'gender', 'password', 'role', 'is_active', 'pressing_id', 'agency_id', 'phone', 'address', 'photo_path'
     ];
 
     protected $hidden = ['password', 'remember_token'];
