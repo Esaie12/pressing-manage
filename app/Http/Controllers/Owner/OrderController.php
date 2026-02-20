@@ -49,7 +49,7 @@ class OrderController extends Controller
                 'client_id' => $client->id,
                 'employee_id' => $request->user()->id,
                 'reference' => 'CMD-'.strtoupper(uniqid()),
-                'status' => 'created',
+                'status' => 'pending',
                 'paid_advance' => $data['paid_advance'] ?? false,
                 'total' => 0,
             ]);

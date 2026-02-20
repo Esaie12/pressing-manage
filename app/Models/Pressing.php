@@ -8,7 +8,12 @@ class Pressing extends Model
 {
     protected $fillable = [
         'name', 'owner_id', 'phone', 'address',
-        'invoice_template', 'invoice_primary_color', 'invoice_welcome_message', 'invoice_logo_path', 'opening_time', 'closing_time'
+        'invoice_template', 'invoice_primary_color', 'invoice_welcome_message', 'invoice_logo_path', 'opening_time', 'closing_time',
+        'allow_transaction_cancellation', 'transaction_cancellation_window_minutes',
+    ];
+
+    protected $casts = [
+        'allow_transaction_cancellation' => 'boolean',
     ];
 
     public function owner()
