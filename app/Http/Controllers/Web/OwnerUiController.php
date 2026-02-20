@@ -154,83 +154,7 @@ class OwnerUiController extends Controller
         return view('owner.accounting-report-show', ['report' => $report]);
     }
 
-    private function buildAccountingPreview(int $pressingId, string $month, ?string $agencyId): array
-    {
-        $monthStart = Carbon::parse($month)->startOfMonth();
-        $monthEnd = $monthStart->copy()->endOfMonth();
-
-        $transactions = Transaction::where('pressing_id', $pressingId)
-            ->where('is_cancelled', false)
-            ->whereBetween('happened_at', [$monthStart->startOfDay(), $monthEnd->endOfDay()])
-            ->with('order');
-
-        if ($agencyId) {
-            $transactions->where('agency_id', $agencyId);
-        }
-
-        $txList = $transactions->get();
-        $credits = (float) $txList->where('type', 'encaissement')->sum('amount');
-        $debitsTx = (float) $txList->where('type', 'paiement')->sum('amount');
-
-        $expenseQuery = Expense::where('pressing_id', $pressingId)->whereBetween('expense_date', [$monthStart->toDateString(), $monthEnd->toDateString()]);
-        if ($agencyId) {
-            $expenseQuery->where('agency_id', $agencyId);
-        }
-        $expenses = (float) $expenseQuery->sum('amount');
-
-        $setup = AccountingSetup::where('pressing_id', $pressingId)->where('agency_id', $agencyId)->first();
-        $setupDebits = (float) ($setup?->financial_debts ?? 0) + (float) ($setup?->operating_debts ?? 0) + (float) ($setup?->fixed_asset_debts ?? 0) + (float) ($setup?->other_debts ?? 0);
-
-        $totalDebits = $debitsTx + $expenses + $setupDebits;
-        $netResult = $credits - $totalDebits;
-
-        $entries = $txList->map(function ($tx) {
-            return [
-                'transaction_id' => $tx->id,
-                'agency_id' => $tx->agency_id,
-                'user_id' => $tx->user_id,
-                'entry_type' => $tx->type,
-                'amount' => (float) $tx->amount,
-                'payment_method' => $tx->payment_method,
-                'label' => $tx->label,
-                'order_reference' => $tx->order?->reference,
-                'happened_at' => $tx->happened_at,
-            ];
-        })->values()->all();
-
-        return [
-            'total_credits' => $credits,
-            'total_debits' => $totalDebits,
-            'net_result' => $netResult,
-            'entries' => $entries,
-            'setup' => $setup,
-            'snapshot' => [
-                'period' => $monthStart->format('Y-m'),
-                'credits' => $credits,
-                'debits_transactions' => $debitsTx,
-                'debits_expenses' => $expenses,
-                'debits_setup' => $setupDebits,
-                'net_result' => $netResult,
-                'assets' => [
-                    'capital' => (float) ($setup?->capital ?? 0),
-                    'reserves' => (float) ($setup?->reserves ?? 0),
-                    'retained_earnings' => (float) ($setup?->retained_earnings ?? 0),
-                    'intangible_assets' => (float) ($setup?->intangible_assets ?? 0),
-                    'tangible_assets' => (float) ($setup?->tangible_assets ?? 0),
-                    'financial_assets' => (float) ($setup?->financial_assets ?? 0),
-                    'stocks' => (float) ($setup?->stocks ?? 0),
-                    'receivables' => (float) ($setup?->receivables ?? 0),
-                    'treasury' => (float) ($setup?->treasury ?? 0),
-                ],
-                'liabilities' => [
-                    'financial_debts' => (float) ($setup?->financial_debts ?? 0),
-                    'operating_debts' => (float) ($setup?->operating_debts ?? 0),
-                    'fixed_asset_debts' => (float) ($setup?->fixed_asset_debts ?? 0),
-                    'other_debts' => (float) ($setup?->other_debts ?? 0),
-                ],
-            ],
-        ];
-    }
+    
 
     public function cashClosures(Request $request)
     {
@@ -457,14 +381,7 @@ class OwnerUiController extends Controller
         return redirect()->route('owner.ui.accounting.reports', ['month' => $data['month'], 'agency_id' => $agencyId])->with('success', 'Bilan mensuel sauvegardé.');
     }
 
-    public function showAccountingReport(AccountingReport $report)
-    {
-        abort_unless($report->pressing_id === Auth::user()->pressing_id, 403);
-        $report->load(['agency', 'entries']);
-
-        return view('owner.accounting-report-show', ['report' => $report]);
-    }
-
+    
     private function buildAccountingPreview(int $pressingId, string $month, ?string $agencyId): array
     {
         $monthStart = Carbon::parse($month)->startOfMonth();
@@ -544,102 +461,7 @@ class OwnerUiController extends Controller
         ];
     }
 
-    public function cashClosures(Request $request)
-    {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
-        abort_if(! $pressing->module_cash_closure_enabled, 403, 'Module Clôture de caisse non activé.');
 
-        $closureDate = $request->query('closure_date', now()->toDateString());
-
-        return view('owner.cash-closures', [
-            'closureDate' => $closureDate,
-            'agencies' => Agency::where('pressing_id', Auth::user()->pressing_id)->orderBy('name')->get(),
-            'employees' => User::where('pressing_id', Auth::user()->pressing_id)->where('role', User::ROLE_EMPLOYEE)->orderBy('name')->get(),
-            'closures' => CashClosure::where('pressing_id', Auth::user()->pressing_id)
-                ->with(['agency', 'employee', 'closedBy'])
-                ->latest('closed_at')
-                ->latest()
-                ->get(),
-        ]);
-    }
-
-    public function storeCashClosure(Request $request)
-    {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
-        abort_if(! $pressing->module_cash_closure_enabled, 403, 'Module Clôture de caisse non activé.');
-
-        $data = $request->validate([
-            'closure_date' => ['required', 'date'],
-            'agency_id' => ['nullable', 'exists:agencies,id'],
-            'employee_id' => ['nullable', 'exists:users,id'],
-            'note' => ['nullable', 'string', 'max:1000'],
-        ]);
-
-        $transactions = Transaction::where('pressing_id', Auth::user()->pressing_id)
-            ->where('is_cancelled', false)
-            ->whereDate('happened_at', $data['closure_date'])
-            ->with('order');
-
-        $agencyId = $data['agency_id'] ?? null;
-        if ($agencyId) {
-            Agency::where('id', $agencyId)->where('pressing_id', Auth::user()->pressing_id)->firstOrFail();
-            $transactions->where('agency_id', $agencyId);
-        }
-
-        $employeeId = $data['employee_id'] ?? null;
-        if ($employeeId) {
-            User::where('id', $employeeId)
-                ->where('pressing_id', Auth::user()->pressing_id)
-                ->where('role', User::ROLE_EMPLOYEE)
-                ->firstOrFail();
-            $transactions->where('user_id', $employeeId);
-        }
-
-        $transactionsList = $transactions->get();
-        $encaissement = (float) $transactionsList->where('type', 'encaissement')->sum('amount');
-        $paiement = (float) $transactionsList->where('type', 'paiement')->sum('amount');
-        $count = $transactionsList->count();
-
-        DB::transaction(function () use ($agencyId, $employeeId, $data, $transactionsList, $encaissement, $paiement, $count) {
-            $closure = CashClosure::create([
-                'pressing_id' => Auth::user()->pressing_id,
-                'agency_id' => $agencyId,
-                'employee_id' => $employeeId,
-                'closed_by_user_id' => Auth::id(),
-                'closure_date' => $data['closure_date'],
-                'encaissement_total' => $encaissement,
-                'paiement_total' => $paiement,
-                'net_total' => (float) $encaissement - (float) $paiement,
-                'transactions_count' => $count,
-                'closed_at' => now(),
-                'note' => $data['note'] ?? null,
-            ]);
-
-            foreach ($transactionsList as $tx) {
-                CashClosureEntry::create([
-                    'cash_closure_id' => $closure->id,
-                    'transaction_id' => $tx->id,
-                    'user_id' => $tx->user_id,
-                    'transaction_type' => $tx->type,
-                    'amount' => $tx->amount,
-                    'payment_method' => $tx->payment_method,
-                    'label' => $tx->label,
-                    'order_reference' => $tx->order?->reference,
-                    'happened_at' => $tx->happened_at,
-                ]);
-            }
-        });
-
-        return redirect()->route('owner.ui.cash-closures')->with('success', 'Clôture de caisse enregistrée.');
-    }
-
-    public function showCashClosure(CashClosure $cashClosure)
-    {
-        abort_unless($cashClosure->pressing_id === Auth::user()->pressing_id, 403);
-        $cashClosure->load(['agency', 'employee', 'closedBy', 'entries.user']);
-
-        return view('owner.cash-closure-show', ['closure' => $cashClosure]);
-    }
 
     public function agencies()
     {
