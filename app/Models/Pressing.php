@@ -11,11 +11,13 @@ class Pressing extends Model
         'invoice_template', 'invoice_primary_color', 'invoice_welcome_message', 'invoice_logo_path', 'opening_time', 'closing_time',
         'allow_transaction_cancellation', 'transaction_cancellation_window_minutes',
         'module_cash_closure_enabled',
+        'module_accounting_enabled',
     ];
 
     protected $casts = [
         'allow_transaction_cancellation' => 'boolean',
         'module_cash_closure_enabled' => 'boolean',
+        'module_accounting_enabled' => 'boolean',
     ];
 
     public function owner()

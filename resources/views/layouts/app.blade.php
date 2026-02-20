@@ -75,6 +75,8 @@
                             @endif
                         </ul>
                     </li>
+
+                    
                     <li class="nav-item"><a class="nav-link {{ request()->routeIs('owner.ui.pricing*') ? 'active fw-semibold' : '' }}" href="{{ route('owner.ui.pricing') }}">Abonnement</a></li>
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle {{ request()->routeIs('owner.ui.settings*','owner.ui.agencies*','owner.ui.employees*','owner.ui.services*') ? 'active fw-semibold' : '' }}" href="#" role="button" data-bs-toggle="dropdown">Paramètres</a>

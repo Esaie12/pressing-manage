@@ -66,6 +66,7 @@ Route::middleware(['auth', RoleMiddleware::class.':owner'])->prefix('owner')->gr
 
     Route::get('/ui/dashboard', [OwnerUiController::class, 'dashboard'])->name('owner.ui.dashboard');
     Route::post('/ui/modules/cash-closure/toggle', [OwnerUiController::class, 'toggleCashClosureModule'])->name('owner.ui.modules.cash-closure.toggle');
+    Route::post('/ui/modules/accounting/toggle', [OwnerUiController::class, 'toggleAccountingModule'])->name('owner.ui.modules.accounting.toggle');
     Route::get('/ui/agencies', [OwnerUiController::class, 'agencies'])->name('owner.ui.agencies');
     Route::post('/ui/agencies', [OwnerUiController::class, 'storeAgency'])->name('owner.ui.agencies.store');
     Route::post('/ui/agencies/{agency}/toggle', [OwnerUiController::class, 'toggleAgency'])->name('owner.ui.agencies.toggle');
@@ -114,6 +115,12 @@ Route::middleware(['auth', RoleMiddleware::class.':owner'])->prefix('owner')->gr
 
     Route::get('/ui/pricing', [OwnerUiController::class, 'pricing'])->name('owner.ui.pricing');
     Route::post('/ui/pricing/subscribe', [OwnerUiController::class, 'subscribePlan'])->name('owner.ui.pricing.subscribe');
+
+    Route::get('/ui/accounting/settings', [OwnerUiController::class, 'accountingSettings'])->name('owner.ui.accounting.settings');
+    Route::post('/ui/accounting/settings', [OwnerUiController::class, 'saveAccountingSettings'])->name('owner.ui.accounting.settings.save');
+    Route::get('/ui/accounting/reports', [OwnerUiController::class, 'accountingReports'])->name('owner.ui.accounting.reports');
+    Route::post('/ui/accounting/reports', [OwnerUiController::class, 'saveAccountingReport'])->name('owner.ui.accounting.reports.save');
+    Route::get('/ui/accounting/reports/{report}', [OwnerUiController::class, 'showAccountingReport'])->name('owner.ui.accounting.reports.show');
 });
 
 Route::middleware(['auth', RoleMiddleware::class.':employee,owner'])->prefix('employee')->group(function () {

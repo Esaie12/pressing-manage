@@ -4,6 +4,9 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\Agency;
+use App\Models\AccountingReport;
+use App\Models\AccountingReportEntry;
+use App\Models\AccountingSetup;
 use App\Models\CategoryExpense;
 use App\Models\CashClosure;
 use App\Models\CashClosureEntry;
@@ -73,6 +76,311 @@ class OwnerUiController extends Controller
         return redirect()->route('owner.ui.dashboard')->with('success', $pressing->module_cash_closure_enabled
             ? 'Module Clôture de caisse activé.'
             : 'Module Clôture de caisse désactivé.');
+    }
+
+    public function toggleAccountingModule()
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing->update(['module_accounting_enabled' => ! $pressing->module_accounting_enabled]);
+
+        return redirect()->route('owner.ui.dashboard')->with('success', $pressing->module_accounting_enabled
+            ? 'Module Comptabilité activé.'
+            : 'Module Comptabilité désactivé.');
+    }
+
+    public function accountingSettings(Request $request)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if(! $pressing->module_accounting_enabled, 403, 'Module Comptabilité non activé.');
+
+        $agencyId = $request->query('agency_id');
+        $setup = AccountingSetup::where('pressing_id', $pressing->id)
+            ->where('agency_id', $agencyId)
+            ->first();
+
+        return view('owner.accounting-settings', [
+            'pressing' => $pressing,
+            'agencies' => Agency::where('pressing_id', $pressing->id)->orderBy('name')->get(),
+            'selectedAgencyId' => $agencyId,
+            'setup' => $setup,
+        ]);
+
+        $transactions = Transaction::where('pressing_id', Auth::user()->pressing_id)
+            ->where('is_cancelled', false)
+            ->whereDate('happened_at', $data['closure_date'])
+            ->with('order');
+
+        $agencyId = $data['agency_id'] ?? null;
+        if ($agencyId) {
+            Agency::where('id', $agencyId)->where('pressing_id', Auth::user()->pressing_id)->firstOrFail();
+            $transactions->where('agency_id', $agencyId);
+        }
+
+        $employeeId = $data['employee_id'] ?? null;
+        if ($employeeId) {
+            User::where('id', $employeeId)
+                ->where('pressing_id', Auth::user()->pressing_id)
+                ->where('role', User::ROLE_EMPLOYEE)
+                ->firstOrFail();
+            $transactions->where('user_id', $employeeId);
+        }
+
+        $transactionsList = $transactions->get();
+        $encaissement = (float) $transactionsList->where('type', 'encaissement')->sum('amount');
+        $paiement = (float) $transactionsList->where('type', 'paiement')->sum('amount');
+        $count = $transactionsList->count();
+
+        DB::transaction(function () use ($agencyId, $employeeId, $data, $transactionsList, $encaissement, $paiement, $count) {
+            $closure = CashClosure::create([
+                'pressing_id' => Auth::user()->pressing_id,
+                'agency_id' => $agencyId,
+                'employee_id' => $employeeId,
+                'closed_by_user_id' => Auth::id(),
+                'closure_date' => $data['closure_date'],
+                'encaissement_total' => $encaissement,
+                'paiement_total' => $paiement,
+                'net_total' => (float) $encaissement - (float) $paiement,
+                'transactions_count' => $count,
+                'closed_at' => now(),
+                'note' => $data['note'] ?? null,
+            ]);
+
+            foreach ($transactionsList as $tx) {
+                CashClosureEntry::create([
+                    'cash_closure_id' => $closure->id,
+                    'transaction_id' => $tx->id,
+                    'user_id' => $tx->user_id,
+                    'transaction_type' => $tx->type,
+                    'amount' => $tx->amount,
+                    'payment_method' => $tx->payment_method,
+                    'label' => $tx->label,
+                    'order_reference' => $tx->order?->reference,
+                    'happened_at' => $tx->happened_at,
+                ]);
+            }
+        });
+
+        return redirect()->route('owner.ui.cash-closures')->with('success', 'Clôture de caisse enregistrée.');
+    }
+
+    public function showCashClosure(CashClosure $cashClosure)
+    {
+        abort_unless($cashClosure->pressing_id === Auth::user()->pressing_id, 403);
+        $cashClosure->load(['agency', 'employee', 'closedBy', 'entries.user']);
+
+        return view('owner.cash-closure-show', ['closure' => $cashClosure]);
+    }
+
+    public function saveAccountingSettings(Request $request)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if(! $pressing->module_accounting_enabled, 403, 'Module Comptabilité non activé.');
+
+        $data = $request->validate([
+            'agency_id' => ['nullable', 'exists:agencies,id'],
+            'capital' => ['nullable', 'numeric', 'min:0'],
+            'reserves' => ['nullable', 'numeric', 'min:0'],
+            'retained_earnings' => ['nullable', 'numeric'],
+            'intangible_assets' => ['nullable', 'numeric', 'min:0'],
+            'tangible_assets' => ['nullable', 'numeric', 'min:0'],
+            'financial_assets' => ['nullable', 'numeric', 'min:0'],
+            'stocks' => ['nullable', 'numeric', 'min:0'],
+            'receivables' => ['nullable', 'numeric', 'min:0'],
+            'treasury' => ['nullable', 'numeric', 'min:0'],
+            'financial_debts' => ['nullable', 'numeric', 'min:0'],
+            'operating_debts' => ['nullable', 'numeric', 'min:0'],
+            'fixed_asset_debts' => ['nullable', 'numeric', 'min:0'],
+            'other_debts' => ['nullable', 'numeric', 'min:0'],
+            'notes' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $agencyId = $data['agency_id'] ?? null;
+        if ($agencyId) {
+            Agency::where('id', $agencyId)->where('pressing_id', $pressing->id)->firstOrFail();
+        }
+
+        AccountingSetup::updateOrCreate(
+            ['pressing_id' => $pressing->id, 'agency_id' => $agencyId],
+            [
+                'capital' => (float) ($data['capital'] ?? 0),
+                'reserves' => (float) ($data['reserves'] ?? 0),
+                'retained_earnings' => (float) ($data['retained_earnings'] ?? 0),
+                'intangible_assets' => (float) ($data['intangible_assets'] ?? 0),
+                'tangible_assets' => (float) ($data['tangible_assets'] ?? 0),
+                'financial_assets' => (float) ($data['financial_assets'] ?? 0),
+                'stocks' => (float) ($data['stocks'] ?? 0),
+                'receivables' => (float) ($data['receivables'] ?? 0),
+                'treasury' => (float) ($data['treasury'] ?? 0),
+                'financial_debts' => (float) ($data['financial_debts'] ?? 0),
+                'operating_debts' => (float) ($data['operating_debts'] ?? 0),
+                'fixed_asset_debts' => (float) ($data['fixed_asset_debts'] ?? 0),
+                'other_debts' => (float) ($data['other_debts'] ?? 0),
+                'notes' => $data['notes'] ?? null,
+            ]
+        );
+
+        return redirect()->route('owner.ui.accounting.settings', ['agency_id' => $agencyId])->with('success', 'Paramètres de comptabilité enregistrés.');
+    }
+
+    public function accountingReports(Request $request)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if(! $pressing->module_accounting_enabled, 403, 'Module Comptabilité non activé.');
+
+        $month = $request->query('month', now()->startOfMonth()->toDateString());
+        $agencyId = $request->query('agency_id');
+
+        $preview = $this->buildAccountingPreview($pressing->id, $month, $agencyId);
+
+        return view('owner.accounting-reports', [
+            'month' => $month,
+            'agencyId' => $agencyId,
+            'agencies' => Agency::where('pressing_id', $pressing->id)->orderBy('name')->get(),
+            'preview' => $preview,
+            'savedReports' => AccountingReport::where('pressing_id', $pressing->id)
+                ->with('agency')
+                ->latest('saved_at')
+                ->latest()
+                ->get(),
+        ]);
+    }
+
+    public function saveAccountingReport(Request $request)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if(! $pressing->module_accounting_enabled, 403, 'Module Comptabilité non activé.');
+
+        $data = $request->validate([
+            'month' => ['required', 'date'],
+            'agency_id' => ['nullable', 'exists:agencies,id'],
+            'note' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $agencyId = $data['agency_id'] ?? null;
+        if ($agencyId) {
+            Agency::where('id', $agencyId)->where('pressing_id', $pressing->id)->firstOrFail();
+        }
+
+        $preview = $this->buildAccountingPreview($pressing->id, $data['month'], $agencyId);
+
+        DB::transaction(function () use ($pressing, $data, $agencyId, $preview) {
+            $report = AccountingReport::create([
+                'pressing_id' => $pressing->id,
+                'agency_id' => $agencyId,
+                'accounting_setup_id' => $preview['setup']?->id,
+                'created_by_user_id' => Auth::id(),
+                'month' => Carbon::parse($data['month'])->startOfMonth()->toDateString(),
+                'total_credits' => $preview['total_credits'],
+                'total_debits' => $preview['total_debits'],
+                'net_result' => $preview['net_result'],
+                'snapshot' => $preview['snapshot'],
+                'note' => $data['note'] ?? null,
+                'saved_at' => now(),
+            ]);
+
+            foreach ($preview['entries'] as $entry) {
+                AccountingReportEntry::create([
+                    'accounting_report_id' => $report->id,
+                    'transaction_id' => $entry['transaction_id'],
+                    'agency_id' => $entry['agency_id'],
+                    'user_id' => $entry['user_id'],
+                    'entry_type' => $entry['entry_type'],
+                    'amount' => $entry['amount'],
+                    'payment_method' => $entry['payment_method'],
+                    'label' => $entry['label'],
+                    'order_reference' => $entry['order_reference'],
+                    'happened_at' => $entry['happened_at'],
+                ]);
+            }
+        });
+
+        return redirect()->route('owner.ui.accounting.reports', ['month' => $data['month'], 'agency_id' => $agencyId])->with('success', 'Bilan mensuel sauvegardé.');
+    }
+
+    public function showAccountingReport(AccountingReport $report)
+    {
+        abort_unless($report->pressing_id === Auth::user()->pressing_id, 403);
+        $report->load(['agency', 'entries']);
+
+        return view('owner.accounting-report-show', ['report' => $report]);
+    }
+
+    private function buildAccountingPreview(int $pressingId, string $month, ?string $agencyId): array
+    {
+        $monthStart = Carbon::parse($month)->startOfMonth();
+        $monthEnd = $monthStart->copy()->endOfMonth();
+
+        $transactions = Transaction::where('pressing_id', $pressingId)
+            ->where('is_cancelled', false)
+            ->whereBetween('happened_at', [$monthStart->startOfDay(), $monthEnd->endOfDay()])
+            ->with('order');
+
+        if ($agencyId) {
+            $transactions->where('agency_id', $agencyId);
+        }
+
+        $txList = $transactions->get();
+        $credits = (float) $txList->where('type', 'encaissement')->sum('amount');
+        $debitsTx = (float) $txList->where('type', 'paiement')->sum('amount');
+
+        $expenseQuery = Expense::where('pressing_id', $pressingId)->whereBetween('expense_date', [$monthStart->toDateString(), $monthEnd->toDateString()]);
+        if ($agencyId) {
+            $expenseQuery->where('agency_id', $agencyId);
+        }
+        $expenses = (float) $expenseQuery->sum('amount');
+
+        $setup = AccountingSetup::where('pressing_id', $pressingId)->where('agency_id', $agencyId)->first();
+        $setupDebits = (float) ($setup?->financial_debts ?? 0) + (float) ($setup?->operating_debts ?? 0) + (float) ($setup?->fixed_asset_debts ?? 0) + (float) ($setup?->other_debts ?? 0);
+
+        $totalDebits = $debitsTx + $expenses + $setupDebits;
+        $netResult = $credits - $totalDebits;
+
+        $entries = $txList->map(function ($tx) {
+            return [
+                'transaction_id' => $tx->id,
+                'agency_id' => $tx->agency_id,
+                'user_id' => $tx->user_id,
+                'entry_type' => $tx->type,
+                'amount' => (float) $tx->amount,
+                'payment_method' => $tx->payment_method,
+                'label' => $tx->label,
+                'order_reference' => $tx->order?->reference,
+                'happened_at' => $tx->happened_at,
+            ];
+        })->values()->all();
+
+        return [
+            'total_credits' => $credits,
+            'total_debits' => $totalDebits,
+            'net_result' => $netResult,
+            'entries' => $entries,
+            'setup' => $setup,
+            'snapshot' => [
+                'period' => $monthStart->format('Y-m'),
+                'credits' => $credits,
+                'debits_transactions' => $debitsTx,
+                'debits_expenses' => $expenses,
+                'debits_setup' => $setupDebits,
+                'net_result' => $netResult,
+                'assets' => [
+                    'capital' => (float) ($setup?->capital ?? 0),
+                    'reserves' => (float) ($setup?->reserves ?? 0),
+                    'retained_earnings' => (float) ($setup?->retained_earnings ?? 0),
+                    'intangible_assets' => (float) ($setup?->intangible_assets ?? 0),
+                    'tangible_assets' => (float) ($setup?->tangible_assets ?? 0),
+                    'financial_assets' => (float) ($setup?->financial_assets ?? 0),
+                    'stocks' => (float) ($setup?->stocks ?? 0),
+                    'receivables' => (float) ($setup?->receivables ?? 0),
+                    'treasury' => (float) ($setup?->treasury ?? 0),
+                ],
+                'liabilities' => [
+                    'financial_debts' => (float) ($setup?->financial_debts ?? 0),
+                    'operating_debts' => (float) ($setup?->operating_debts ?? 0),
+                    'fixed_asset_debts' => (float) ($setup?->fixed_asset_debts ?? 0),
+                    'other_debts' => (float) ($setup?->other_debts ?? 0),
+                ],
+            ],
+        ];
     }
 
     public function cashClosures(Request $request)
@@ -164,13 +472,7 @@ class OwnerUiController extends Controller
         return redirect()->route('owner.ui.cash-closures')->with('success', 'Clôture de caisse enregistrée.');
     }
 
-    public function showCashClosure(CashClosure $cashClosure)
-    {
-        abort_unless($cashClosure->pressing_id === Auth::user()->pressing_id, 403);
-        $cashClosure->load(['agency', 'employee', 'closedBy', 'entries.user']);
-
-        return view('owner.cash-closure-show', ['closure' => $cashClosure]);
-    }
+    
 
     public function agencies()
     {

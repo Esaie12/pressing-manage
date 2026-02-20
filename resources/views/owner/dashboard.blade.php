@@ -58,5 +58,24 @@
       </div>
     </div>
   </div>
+
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-body d-flex flex-column gap-2">
+        <h5 class="mb-0">Comptabilité (Paramètres et Bilan)</h5>
+        <div class="text-muted small">Activez ce module pour gérer les paramètres comptables et faire/sauvegarder les bilans mensuels (global ou par agence).</div>
+        <div class="mt-2 d-flex gap-2 align-items-center">
+          <form method="POST" action="{{ route('owner.ui.modules.accounting.toggle') }}">
+            @csrf
+            <button class="btn btn-{{ $pressing?->module_accounting_enabled ? 'outline-danger' : 'primary' }}">{{ $pressing?->module_accounting_enabled ? 'Désactiver' : 'Activer' }}</button>
+          </form>
+          @if($pressing?->module_accounting_enabled)
+            <a href="{{ route('owner.ui.accounting.settings') }}" class="btn btn-outline-primary">Paramètres</a>
+            <a href="{{ route('owner.ui.accounting.reports') }}" class="btn btn-outline-secondary">Bilan</a>
+          @endif
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 @endsection
