@@ -116,6 +116,8 @@ Route::middleware(['auth', RoleMiddleware::class.':owner'])->prefix('owner')->gr
 
     Route::get('/ui/stocks', [OwnerUiController::class, 'stocks'])->name('owner.ui.stocks');
     Route::post('/ui/stocks/items', [OwnerUiController::class, 'storeStockItem'])->name('owner.ui.stocks.items.store');
+    Route::post('/ui/stocks/items/{stockItem}', [OwnerUiController::class, 'updateStockItem'])->name('owner.ui.stocks.items.update');
+    Route::post('/ui/stocks/items/{stockItem}/delete', [OwnerUiController::class, 'destroyStockItem'])->name('owner.ui.stocks.items.delete');
     Route::post('/ui/stocks/movements', [OwnerUiController::class, 'storeStockMovement'])->name('owner.ui.stocks.movements.store');
 
     Route::get('/ui/pricing', [OwnerUiController::class, 'pricing'])->name('owner.ui.pricing');
@@ -151,6 +153,7 @@ Route::middleware(['auth', RoleMiddleware::class.':employee'])->prefix('employee
     Route::get('/ui/invoices', [EmployeeUiController::class, 'invoices'])->name('employee.ui.invoices');
     Route::get('/ui/transactions', [EmployeeUiController::class, 'transactions'])->name('employee.ui.transactions');
     Route::get('/ui/stock/daily', [EmployeeUiController::class, 'stockDailyReport'])->name('employee.ui.stock.daily');
+    Route::post('/ui/stock/daily/outgoing', [EmployeeUiController::class, 'storeStockOutgoing'])->name('employee.ui.stock.daily.outgoing.store');
     Route::get('/ui/cash-closures', [EmployeeUiController::class, 'cashClosures'])->name('employee.ui.cash-closures');
     Route::post('/ui/cash-closures', [EmployeeUiController::class, 'storeCashClosure'])->name('employee.ui.cash-closures.store');
     Route::get('/ui/cash-closures/{cashClosure}', [EmployeeUiController::class, 'showCashClosure'])->name('employee.ui.cash-closures.show');

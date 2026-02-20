@@ -122,6 +122,7 @@ class OwnerUiController extends Controller
 
         $agencyId = $request->query('agency_id');
         $date = $request->query('movement_date', now()->toDateString());
+        $section = $request->query('section', 'articles');
 
         $movements = StockMovement::where('pressing_id', $pressing->id)
             ->with(['item', 'user', 'agency', 'sourceAgency', 'targetAgency'])
@@ -135,6 +136,7 @@ class OwnerUiController extends Controller
             ->limit(100)
             ->get();
 
+        $items = StockItem::where('pressing_id', $pressing->id)->orderBy('name')->get();
         $balances = StockBalance::where('pressing_id', $pressing->id)
             ->with(['item', 'agency'])
             ->orderByDesc('agency_id')
@@ -143,11 +145,13 @@ class OwnerUiController extends Controller
         return view('owner.stocks', [
             'pressing' => $pressing,
             'agencies' => Agency::where('pressing_id', $pressing->id)->orderBy('name')->get(),
-            'items' => StockItem::where('pressing_id', $pressing->id)->where('is_active', true)->orderBy('name')->get(),
+            'items' => $items,
+            'activeItems' => $items->where('is_active', true)->values(),
             'movements' => $movements,
             'balances' => $balances,
             'selectedAgencyId' => $agencyId,
             'selectedDate' => $date,
+            'section' => in_array($section, ['articles', 'mouvements', 'stock'], true) ? $section : 'articles',
         ]);
     }
 
@@ -159,18 +163,64 @@ class OwnerUiController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'sku' => ['nullable', 'string', 'max:80'],
-            'unit' => ['nullable', 'string', 'max:20'],
+            'unit' => ['required', 'in:unité,kg,litre,ml,paquet,carton,mètre'],
+            'alert_quantity' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         StockItem::create([
             'pressing_id' => $pressing->id,
             'name' => $data['name'],
             'sku' => $data['sku'] ?? null,
-            'unit' => $data['unit'] ?? 'unité',
+            'unit' => $data['unit'],
+            'alert_quantity_central' => $pressing->stock_mode === 'central' ? (float) ($data['alert_quantity'] ?? 0) : null,
+            'alert_quantity_agency' => $pressing->stock_mode === 'agency' ? (float) ($data['alert_quantity'] ?? 0) : null,
             'is_active' => true,
         ]);
 
-        return redirect()->route('owner.ui.stocks')->with('success', 'Article de stock ajouté.');
+        return redirect()->route('owner.ui.stocks', ['section' => 'articles'])->with('success', 'Article de stock ajouté.');
+    }
+
+    public function updateStockItem(Request $request, StockItem $stockItem)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if($stockItem->pressing_id !== $pressing->id, 403);
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'sku' => ['nullable', 'string', 'max:80'],
+            'unit' => ['required', 'in:unité,kg,litre,ml,paquet,carton,mètre'],
+            'alert_quantity' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        $stockItem->update([
+            'name' => $data['name'],
+            'sku' => $data['sku'] ?? null,
+            'unit' => $data['unit'],
+            'alert_quantity_central' => $pressing->stock_mode === 'central' ? (float) ($data['alert_quantity'] ?? 0) : $stockItem->alert_quantity_central,
+            'alert_quantity_agency' => $pressing->stock_mode === 'agency' ? (float) ($data['alert_quantity'] ?? 0) : $stockItem->alert_quantity_agency,
+        ]);
+
+        return redirect()->route('owner.ui.stocks', ['section' => 'articles'])->with('success', 'Article de stock modifié.');
+    }
+
+    public function destroyStockItem(StockItem $stockItem)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if($stockItem->pressing_id !== $pressing->id, 403);
+
+        $hasMovements = StockMovement::where('pressing_id', $pressing->id)
+            ->where('stock_item_id', $stockItem->id)
+            ->exists();
+
+        if ($hasMovements) {
+            $stockItem->update(['is_active' => false]);
+
+            return redirect()->route('owner.ui.stocks', ['section' => 'articles'])->with('success', 'Article désactivé (historique conservé).');
+        }
+
+        $stockItem->delete();
+
+        return redirect()->route('owner.ui.stocks', ['section' => 'articles'])->with('success', 'Article supprimé.');
     }
 
     public function storeStockMovement(Request $request)
@@ -181,13 +231,12 @@ class OwnerUiController extends Controller
 
         $data = $request->validate([
             'stock_item_id' => ['required', 'exists:stock_items,id'],
-            'movement_type' => ['required', 'in:entree,sortie,transfert,ajustement,perte_casse'],
+            'movement_type' => ['required', 'in:entree,sortie,transfert,perte_casse'],
             'quantity' => ['required', 'numeric', 'gt:0'],
             'movement_date' => ['required', 'date'],
-            'agency_id' => ['nullable', 'exists:agencies,id'],
+            'location_agency_id' => ['nullable', 'exists:agencies,id'],
             'source_agency_id' => ['nullable', 'exists:agencies,id'],
             'target_agency_id' => ['nullable', 'exists:agencies,id'],
-            'adjustment_sign' => ['nullable', 'in:plus,minus'],
             'note' => ['nullable', 'string', 'max:500'],
         ]);
 
@@ -202,29 +251,29 @@ class OwnerUiController extends Controller
             return Agency::where('id', $agencyId)->where('pressing_id', $pressing->id)->firstOrFail()->id;
         };
 
-        $agencyId = $resolveAgency($data['agency_id'] ?? null);
+        $agencyId = $resolveAgency($data['location_agency_id'] ?? null);
         $sourceAgencyId = $resolveAgency($data['source_agency_id'] ?? null);
         $targetAgencyId = $resolveAgency($data['target_agency_id'] ?? null);
 
-        if ($pressing->stock_mode === 'agency' && $data['movement_type'] === 'transfert') {
-            return redirect()->route('owner.ui.stocks')->with('error', 'Le mode Stock par agence ne permet pas les transferts centralisés.');
+        if ($pressing->stock_mode === 'agency' && ! $agencyId && $data['movement_type'] !== 'transfert') {
+            return redirect()->route('owner.ui.stocks', ['section' => 'mouvements'])->with('error', 'En mode Stock par agence, vous devez choisir une agence.');
         }
 
-        if ($pressing->stock_mode === 'agency' && ! $agencyId && $data['movement_type'] !== 'transfert') {
-            return redirect()->route('owner.ui.stocks')->with('error', 'En mode Stock par agence, vous devez choisir une agence.');
+        if ($pressing->stock_mode === 'agency' && $data['movement_type'] === 'transfert') {
+            return redirect()->route('owner.ui.stocks', ['section' => 'mouvements'])->with('error', 'Le mode Stock par agence ne permet pas les transferts centralisés.');
         }
 
         if ($pressing->stock_mode === 'central' && $data['movement_type'] === 'transfert') {
             if ($sourceAgencyId && $targetAgencyId) {
-                return redirect()->route('owner.ui.stocks')->with('error', 'Transfert agence → agence interdit. Utilisez magasin central ↔ agence.');
+                return redirect()->route('owner.ui.stocks', ['section' => 'mouvements'])->with('error', 'Transfert agence → agence interdit. Utilisez magasin central ↔ agence.');
             }
             if (! $sourceAgencyId && ! $targetAgencyId) {
-                return redirect()->route('owner.ui.stocks')->with('error', 'Choisissez une source ou une destination agence pour le transfert.');
+                return redirect()->route('owner.ui.stocks', ['section' => 'mouvements'])->with('error', 'Choisissez une source ou une destination agence pour le transfert.');
             }
         }
 
         DB::transaction(function () use ($pressing, $owner, $item, $data, $qty, $agencyId, $sourceAgencyId, $targetAgencyId) {
-            $movement = StockMovement::create([
+            StockMovement::create([
                 'pressing_id' => $pressing->id,
                 'stock_item_id' => $item->id,
                 'user_id' => $owner->id,
@@ -241,19 +290,13 @@ class OwnerUiController extends Controller
                 $this->adjustStockBalance($pressing->id, $item->id, $agencyId, $qty);
             } elseif ($data['movement_type'] === 'sortie' || $data['movement_type'] === 'perte_casse') {
                 $this->adjustStockBalance($pressing->id, $item->id, $agencyId, -$qty);
-            } elseif ($data['movement_type'] === 'ajustement') {
-                $sign = $data['adjustment_sign'] ?? 'plus';
-                $delta = $sign === 'minus' ? -$qty : $qty;
-                $movement->note = trim(($movement->note ? $movement->note.' | ' : '').'Ajustement '.($sign === 'minus' ? '-' : '+'));
-                $movement->save();
-                $this->adjustStockBalance($pressing->id, $item->id, $agencyId, $delta);
             } elseif ($data['movement_type'] === 'transfert') {
                 $this->adjustStockBalance($pressing->id, $item->id, $sourceAgencyId, -$qty);
                 $this->adjustStockBalance($pressing->id, $item->id, $targetAgencyId, $qty);
             }
         });
 
-        return redirect()->route('owner.ui.stocks')->with('success', 'Mouvement de stock enregistré.');
+        return redirect()->route('owner.ui.stocks', ['section' => 'mouvements'])->with('success', 'Mouvement de stock enregistré.');
     }
 
     public function accountingSettings(Request $request)
