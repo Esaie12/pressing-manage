@@ -74,6 +74,11 @@ class OwnerUiController extends Controller
     public function toggleCashClosureModule()
     {
         $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+
+        if (! $this->planAllows($pressing->id, 'allow_cash_closure_module')) {
+            return redirect()->route('owner.ui.dashboard')->with('error', 'Votre pack ne permet pas le module Clôture de caisse.');
+        }
+
         $pressing->update(['module_cash_closure_enabled' => ! $pressing->module_cash_closure_enabled]);
 
         return redirect()->route('owner.ui.dashboard')->with('success', $pressing->module_cash_closure_enabled
@@ -84,6 +89,11 @@ class OwnerUiController extends Controller
     public function toggleAccountingModule()
     {
         $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+
+        if (! $this->planAllows($pressing->id, 'allow_accounting_module')) {
+            return redirect()->route('owner.ui.dashboard')->with('error', 'Votre pack ne permet pas le module Comptabilité.');
+        }
+
         $pressing->update(['module_accounting_enabled' => ! $pressing->module_accounting_enabled]);
 
         return redirect()->route('owner.ui.dashboard')->with('success', $pressing->module_accounting_enabled
@@ -95,6 +105,10 @@ class OwnerUiController extends Controller
     public function toggleStockModule(Request $request)
     {
         $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+
+        if (! $this->planAllows($pressing->id, 'allow_stock_module')) {
+            return redirect()->route('owner.ui.dashboard')->with('error', 'Votre pack ne permet pas le module Stock.');
+        }
 
         if (! $pressing->module_stock_enabled && ! $pressing->stock_mode) {
             $data = $request->validate([
@@ -1163,6 +1177,13 @@ class OwnerUiController extends Controller
 
         $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
 
+        if (! $this->planAllows($pressing->id, 'allow_customization')) {
+            unset($data['invoice_template'], $data['invoice_primary_color'], $data['invoice_welcome_message']);
+            if ($request->hasFile('invoice_logo')) {
+                return redirect()->route('owner.ui.settings')->with('error', 'Votre pack ne permet pas la personnalisation.');
+            }
+        }
+
         if ($request->hasFile('invoice_logo')) {
             $data['invoice_logo_path'] = $request->file('invoice_logo')->store('logos', 'public');
         }
@@ -1215,6 +1236,19 @@ class OwnerUiController extends Controller
             'ends_at' => $end->toDateString(),
             'is_active' => true,
         ]);
+
+        $plan = SubscriptionPlan::findOrFail($data['subscription_plan_id']);
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        if (! $plan->allow_cash_closure_module && $pressing->module_cash_closure_enabled) {
+            $pressing->module_cash_closure_enabled = false;
+        }
+        if (! $plan->allow_accounting_module && $pressing->module_accounting_enabled) {
+            $pressing->module_accounting_enabled = false;
+        }
+        if (! $plan->allow_stock_module && $pressing->module_stock_enabled) {
+            $pressing->module_stock_enabled = false;
+        }
+        $pressing->save();
 
         return redirect()->route('owner.ui.pricing')->with('success', 'Souscription effectuée avec succès.');
     }
@@ -1636,6 +1670,22 @@ class OwnerUiController extends Controller
         }
 
         $balance->update(['quantity' => $next]);
+    }
+
+    private function planAllows(int $pressingId, string $feature): bool
+    {
+        $subscription = OwnerSubscription::where('pressing_id', $pressingId)
+            ->where('is_active', true)
+            ->whereDate('ends_at', '>=', now()->toDateString())
+            ->with('plan')
+            ->latest('ends_at')
+            ->first();
+
+        if (! $subscription || ! $subscription->plan) {
+            return true;
+        }
+
+        return (bool) ($subscription->plan->{$feature} ?? true);
     }
 
     private function canCancelTransaction(Pressing $pressing, Transaction $transaction): bool

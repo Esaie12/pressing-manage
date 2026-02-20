@@ -41,6 +41,10 @@
                 <hr>
                 <div class="small">Agences max: <strong>{{ $plan->max_agencies }}</strong></div>
                 <div class="small">Employés max: <strong>{{ $plan->max_employees }}</strong></div>
+                <div class="small mt-2">Personnalisation: {!! $plan->allow_customization ? '<span class="badge text-bg-success">Oui</span>' : '<span class="badge text-bg-secondary">Non</span>' !!}</div>
+                <div class="small">Module Stock: {!! $plan->allow_stock_module ? '<span class="badge text-bg-success">Oui</span>' : '<span class="badge text-bg-secondary">Non</span>' !!}</div>
+                <div class="small">Module Comptabilité: {!! $plan->allow_accounting_module ? '<span class="badge text-bg-success">Oui</span>' : '<span class="badge text-bg-secondary">Non</span>' !!}</div>
+                <div class="small">Module Clôture caisse: {!! $plan->allow_cash_closure_module ? '<span class="badge text-bg-success">Oui</span>' : '<span class="badge text-bg-secondary">Non</span>' !!}</div>
                 <form method="POST" action="{{ route('owner.ui.pricing.subscribe') }}" class="mt-3 vstack gap-2">
                   @csrf
                   <input type="hidden" name="subscription_plan_id" value="{{ $plan->id }}">

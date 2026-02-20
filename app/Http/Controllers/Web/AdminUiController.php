@@ -148,12 +148,23 @@ class AdminUiController extends Controller
 
     private function validatePlan(Request $request): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'name' => ['required', 'string', 'max:100'],
             'monthly_price' => ['required', 'numeric', 'min:0'],
             'annual_price' => ['required', 'numeric', 'min:0'],
             'max_agencies' => ['required', 'integer', 'min:1'],
             'max_employees' => ['required', 'integer', 'min:1'],
+            'allow_customization' => ['nullable', 'boolean'],
+            'allow_cash_closure_module' => ['nullable', 'boolean'],
+            'allow_accounting_module' => ['nullable', 'boolean'],
+            'allow_stock_module' => ['nullable', 'boolean'],
         ]);
+
+        $data['allow_customization'] = (bool) ($data['allow_customization'] ?? false);
+        $data['allow_cash_closure_module'] = (bool) ($data['allow_cash_closure_module'] ?? false);
+        $data['allow_accounting_module'] = (bool) ($data['allow_accounting_module'] ?? false);
+        $data['allow_stock_module'] = (bool) ($data['allow_stock_module'] ?? false);
+
+        return $data;
     }
 }

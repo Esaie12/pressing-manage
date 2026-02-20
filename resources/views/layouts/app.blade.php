@@ -28,15 +28,25 @@
 
     $userNotifications = \App\Models\UserNotification::where('user_id', auth()->id())->latest()->limit(15)->get();
     $notifCount += \App\Models\UserNotification::where('user_id', auth()->id())->where('is_read', false)->count();
-    $ownerPressing = auth()->user()->role === \App\Models\User::ROLE_OWNER
+    $activePressing = in_array(auth()->user()->role, [\App\Models\User::ROLE_OWNER, \App\Models\User::ROLE_EMPLOYEE], true)
         ? \App\Models\Pressing::find(auth()->user()->pressing_id)
         : null;
+    $ownerPressing = auth()->user()->role === \App\Models\User::ROLE_OWNER
+        ? $activePressing
+        : null;
+
+    $activeSubscription = $activePressing
+        ? \App\Models\OwnerSubscription::where('pressing_id', $activePressing->id)->where('is_active', true)->whereDate('ends_at', '>=', now()->toDateString())->with('plan')->latest('ends_at')->first()
+        : null;
+
+    $brandLabel = ($activePressing && $activeSubscription && empty($activePressing->invoice_logo_path))
+        ? $activePressing->name
+        : 'Pressing Platform';
 @endphp
 <nav class="navbar navbar-expand-lg bg-white border-bottom sticky-top">
     <div class="container-fluid container-xl">
         <a class="navbar-brand fw-bold" href="{{ route('dashboard') }}">
-            <small class="text-primary">Pressing Platform</small>
-            @yield('heading', 'Dashboard')
+            <small class="text-primary">{{ $brandLabel }}</small>
         </a>
 
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
@@ -172,6 +182,12 @@
 @endauth
 
 <main class="container-xl py-4 flex-grow-1">
+    @hasSection('heading')
+        <div class="mb-3">
+            <h5 class="mb-0">@yield('heading')</h5>
+        </div>
+    @endif
+
     @if($errors->any())
         <div class="alert alert-danger"><ul class="mb-0">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>
     @endif
