@@ -4,12 +4,15 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\Agency;
+use App\Models\CashClosure;
+use App\Models\CashClosureEntry;
 use App\Models\Client;
 use App\Models\EmployeeRequest;
 use App\Models\Invoice;
 use App\Models\Order;
 use App\Models\OrderStatus;
 use App\Models\OrderItem;
+use App\Models\Pressing;
 use App\Models\Service;
 use App\Models\User;
 use App\Models\UserNotification;
@@ -60,6 +63,15 @@ class EmployeeUiController extends Controller
             }
         }
 
+        $pressing = Pressing::find($employee->pressing_id);
+        $cashClosureAlert = null;
+        if ($pressing?->module_cash_closure_enabled && $pressing?->closing_time) {
+            $closingTime = now()->setTimeFromTimeString($pressing->closing_time);
+            if (now()->between($closingTime->copy()->subHour(), $closingTime)) {
+                $cashClosureAlert = '⚠️ Pensez à clôturer votre caisse avant la fermeture.';
+            }
+        }
+
         return view('employee.dashboard', [
             'inProgress' => Order::where('employee_id', $employee->id)->whereNull('picked_up_at')->count(),
             'pickedUp' => Order::where('employee_id', $employee->id)->whereNotNull('picked_up_at')->count(),
@@ -73,7 +85,103 @@ class EmployeeUiController extends Controller
             'last7Revenue' => $last7Revenue,
             'greeting' => $greeting,
             'closingAlert' => $closingAlert,
+            'cashClosureAlert' => $cashClosureAlert,
         ]);
+    }
+
+    public function cashClosures(Request $request)
+    {
+        $employee = Auth::user();
+        abort_unless($employee->is_active, 403);
+        abort_if(! $employee->pressing?->module_cash_closure_enabled, 403, 'Module Clôture de caisse non activé.');
+
+        return view('employee.cash-closures', [
+            'closureDate' => $request->query('closure_date', now()->toDateString()),
+            'closures' => CashClosure::where('pressing_id', $employee->pressing_id)
+                ->where('agency_id', $employee->agency_id)
+                ->where('employee_id', $employee->id)
+                ->with(['closedBy'])
+                ->latest('closed_at')
+                ->latest()
+                ->get(),
+        ]);
+    }
+
+    public function storeCashClosure(Request $request)
+    {
+        $employee = Auth::user();
+        abort_unless($employee->is_active, 403);
+        $pressing = Pressing::findOrFail($employee->pressing_id);
+        abort_if(! $pressing->module_cash_closure_enabled, 403, 'Module Clôture de caisse non activé.');
+
+        $data = $request->validate([
+            'closure_date' => ['required', 'date'],
+            'note' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $closureTime = now();
+        if ($pressing->closing_time) {
+            $closingTime = now()->setTimeFromTimeString($pressing->closing_time);
+            $allowedAt = $closingTime->copy()->subMinutes(30);
+            if ($closureTime->lt($allowedAt)) {
+                return redirect()->route('employee.ui.cash-closures')
+                    ->with('error', 'Clôture possible uniquement à partir de '.$allowedAt->format('H:i').'.');
+            }
+        }
+
+        $transactions = Transaction::where('pressing_id', $employee->pressing_id)
+            ->where('agency_id', $employee->agency_id)
+            ->where('user_id', $employee->id)
+            ->where('is_cancelled', false)
+            ->whereDate('happened_at', $data['closure_date'])
+            ->with('order')
+            ->get();
+
+        $encaissement = (float) $transactions->where('type', 'encaissement')->sum('amount');
+        $paiement = (float) $transactions->where('type', 'paiement')->sum('amount');
+
+        DB::transaction(function () use ($employee, $data, $transactions, $encaissement, $paiement, $closureTime) {
+            $closure = CashClosure::create([
+                'pressing_id' => $employee->pressing_id,
+                'agency_id' => $employee->agency_id,
+                'employee_id' => $employee->id,
+                'closed_by_user_id' => $employee->id,
+                'closure_date' => $data['closure_date'],
+                'encaissement_total' => $encaissement,
+                'paiement_total' => $paiement,
+                'net_total' => $encaissement - $paiement,
+                'transactions_count' => $transactions->count(),
+                'closed_at' => $closureTime,
+                'note' => $data['note'] ?? null,
+            ]);
+
+            foreach ($transactions as $tx) {
+                CashClosureEntry::create([
+                    'cash_closure_id' => $closure->id,
+                    'transaction_id' => $tx->id,
+                    'user_id' => $tx->user_id,
+                    'transaction_type' => $tx->type,
+                    'amount' => $tx->amount,
+                    'payment_method' => $tx->payment_method,
+                    'label' => $tx->label,
+                    'order_reference' => $tx->order?->reference,
+                    'happened_at' => $tx->happened_at,
+                ]);
+            }
+        });
+
+        return redirect()->route('employee.ui.cash-closures')->with('success', 'Clôture effectuée avec succès.');
+    }
+
+    public function showCashClosure(CashClosure $cashClosure)
+    {
+        $employee = Auth::user();
+        abort_unless($employee->is_active, 403);
+        abort_unless($cashClosure->pressing_id === $employee->pressing_id && $cashClosure->agency_id === $employee->agency_id && $cashClosure->employee_id === $employee->id, 403);
+
+        $cashClosure->load(['entries.user']);
+
+        return view('employee.cash-closure-show', ['closure' => $cashClosure]);
     }
 
     public function requests()
@@ -262,6 +370,7 @@ class EmployeeUiController extends Controller
     {
         abort_unless(Auth::user()->is_active, 403);
         abort_unless($order->agency_id === Auth::user()->agency_id, 403);
+        abort_if($order->status !== 'pending', 422, 'Seules les commandes en attente peuvent être modifiées.');
         $order->load(['items.service', 'client']);
 
         return view('employee.order-edit', [
@@ -275,6 +384,7 @@ class EmployeeUiController extends Controller
     {
         abort_unless(Auth::user()->is_active, 403);
         abort_unless($order->agency_id === Auth::user()->agency_id, 403);
+        abort_if($order->status !== 'pending', 422, 'Seules les commandes en attente peuvent être modifiées.');
 
         $data = $this->validateOrderPayload($request);
         $agency = Agency::where('id', Auth::user()->agency_id)
@@ -334,18 +444,68 @@ class EmployeeUiController extends Controller
 
     public function transactions()
     {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+
         return view('employee.transactions', [
             'transactions' => Transaction::where('agency_id', Auth::user()->agency_id)
-                ->with(['user', 'order', 'expense'])
+                ->with(['user', 'order', 'expense', 'cancelledBy'])
                 ->latest('happened_at')
                 ->latest()
                 ->get(),
+            'pressing' => $pressing,
         ]);
+    }
+
+    public function cancelTransaction(Transaction $transaction)
+    {
+        $user = Auth::user();
+        $pressing = Pressing::findOrFail($user->pressing_id);
+        abort_unless($transaction->agency_id === $user->agency_id && $transaction->pressing_id === $user->pressing_id, 403);
+
+        if (! $this->canCancelTransaction($pressing, $transaction)) {
+            return redirect()->route('employee.ui.transactions')->with('error', 'Cette transaction ne peut plus être annulée.');
+        }
+
+        DB::transaction(function () use ($transaction, $user) {
+            if ($transaction->type === 'encaissement' && $transaction->order_id) {
+                $order = Order::lockForUpdate()->find($transaction->order_id);
+                if ($order) {
+                    $order->advance_amount = max(0, (float) $order->advance_amount - (float) $transaction->amount);
+                    $order->paid_advance = (float) $order->advance_amount > 0;
+                    $order->save();
+                }
+            }
+
+            $transaction->update([
+                'is_cancelled' => true,
+                'cancelled_by_user_id' => $user->id,
+                'cancelled_at' => now(),
+                'cancellation_note' => 'Annulée par un employé.',
+            ]);
+
+            $owner = User::where('pressing_id', $user->pressing_id)->where('role', User::ROLE_OWNER)->first();
+            if ($owner) {
+                UserNotification::create([
+                    'user_id' => $owner->id,
+                    'type' => 'transaction_cancelled',
+                    'title' => 'Transaction annulée par un employé',
+                    'message' => $user->name.' a annulé une transaction de '.$transaction->amount.' FCFA ('.$transaction->label.').',
+                    'data' => [
+                        'transaction_id' => $transaction->id,
+                        'order_id' => $transaction->order_id,
+                        'agency_id' => $transaction->agency_id,
+                    ],
+                ]);
+            }
+        });
+
+        return redirect()->route('employee.ui.transactions')->with('success', 'Transaction annulée.');
     }
 
     public function markReady(Order $order)
     {
         abort_unless($order->agency_id === Auth::user()->agency_id, 403);
+        abort_if($order->status !== 'pending', 422, 'Seules les commandes en attente peuvent être marquées prêtes.');
 
         $order->update(['status' => 'ready', 'ready_at' => now()]);
 
@@ -355,6 +515,7 @@ class EmployeeUiController extends Controller
     public function markPickedUp(Order $order)
     {
         abort_unless($order->agency_id === Auth::user()->agency_id, 403);
+        abort_if($order->status !== 'pending', 422, 'Seules les commandes en attente peuvent être marquées retirées.');
 
         if ((float) $order->advance_amount < (float) $order->total) {
             return redirect()->route('employee.ui.orders')->with('error', 'Commande non totalement payée.');
@@ -462,6 +623,22 @@ class EmployeeUiController extends Controller
         }
 
         return [$order, $total];
+    }
+
+    private function canCancelTransaction(Pressing $pressing, Transaction $transaction): bool
+    {
+        if (! $pressing->allow_transaction_cancellation || $transaction->is_cancelled) {
+            return false;
+        }
+
+        $window = (int) ($pressing->transaction_cancellation_window_minutes ?? 0);
+        if ($window <= 0) {
+            return false;
+        }
+
+        $referenceTime = $transaction->happened_at ?? $transaction->created_at;
+
+        return now()->lessThanOrEqualTo($referenceTime->copy()->addMinutes($window));
     }
 
 }

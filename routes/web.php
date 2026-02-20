@@ -65,6 +65,8 @@ Route::middleware(['auth', RoleMiddleware::class.':owner'])->prefix('owner')->gr
     Route::get('/stats', [OrderController::class, 'stats']);
 
     Route::get('/ui/dashboard', [OwnerUiController::class, 'dashboard'])->name('owner.ui.dashboard');
+    Route::post('/ui/modules/cash-closure/toggle', [OwnerUiController::class, 'toggleCashClosureModule'])->name('owner.ui.modules.cash-closure.toggle');
+    Route::post('/ui/modules/accounting/toggle', [OwnerUiController::class, 'toggleAccountingModule'])->name('owner.ui.modules.accounting.toggle');
     Route::get('/ui/agencies', [OwnerUiController::class, 'agencies'])->name('owner.ui.agencies');
     Route::post('/ui/agencies', [OwnerUiController::class, 'storeAgency'])->name('owner.ui.agencies.store');
     Route::post('/ui/agencies/{agency}/toggle', [OwnerUiController::class, 'toggleAgency'])->name('owner.ui.agencies.toggle');
@@ -92,6 +94,7 @@ Route::middleware(['auth', RoleMiddleware::class.':owner'])->prefix('owner')->gr
 
     Route::get('/ui/invoices', [OwnerUiController::class, 'invoices'])->name('owner.ui.invoices');
     Route::get('/ui/transactions', [OwnerUiController::class, 'transactions'])->name('owner.ui.transactions');
+    Route::post('/ui/transactions/{transaction}/cancel', [OwnerUiController::class, 'cancelTransaction'])->name('owner.ui.transactions.cancel');
     Route::get('/ui/invoices/{invoice}', [OwnerUiController::class, 'showInvoice'])->name('owner.ui.invoices.show');
 
     Route::get('/ui/settings', [OwnerUiController::class, 'settings'])->name('owner.ui.settings');
@@ -106,9 +109,18 @@ Route::middleware(['auth', RoleMiddleware::class.':owner'])->prefix('owner')->gr
     Route::post('/ui/expenses', [OwnerUiController::class, 'storeExpense'])->name('owner.ui.expenses.store');
     Route::post('/ui/expenses/{expense}', [OwnerUiController::class, 'updateExpense'])->name('owner.ui.expenses.update');
     Route::post('/ui/expenses/{expense}/delete', [OwnerUiController::class, 'destroyExpense'])->name('owner.ui.expenses.delete');
+    Route::get('/ui/cash-closures', [OwnerUiController::class, 'cashClosures'])->name('owner.ui.cash-closures');
+    Route::post('/ui/cash-closures', [OwnerUiController::class, 'storeCashClosure'])->name('owner.ui.cash-closures.store');
+    Route::get('/ui/cash-closures/{cashClosure}', [OwnerUiController::class, 'showCashClosure'])->name('owner.ui.cash-closures.show');
 
     Route::get('/ui/pricing', [OwnerUiController::class, 'pricing'])->name('owner.ui.pricing');
     Route::post('/ui/pricing/subscribe', [OwnerUiController::class, 'subscribePlan'])->name('owner.ui.pricing.subscribe');
+
+    Route::get('/ui/accounting/settings', [OwnerUiController::class, 'accountingSettings'])->name('owner.ui.accounting.settings');
+    Route::post('/ui/accounting/settings', [OwnerUiController::class, 'saveAccountingSettings'])->name('owner.ui.accounting.settings.save');
+    Route::get('/ui/accounting/reports', [OwnerUiController::class, 'accountingReports'])->name('owner.ui.accounting.reports');
+    Route::post('/ui/accounting/reports', [OwnerUiController::class, 'saveAccountingReport'])->name('owner.ui.accounting.reports.save');
+    Route::get('/ui/accounting/reports/{report}', [OwnerUiController::class, 'showAccountingReport'])->name('owner.ui.accounting.reports.show');
 });
 
 Route::middleware(['auth', RoleMiddleware::class.':employee,owner'])->prefix('employee')->group(function () {
@@ -133,6 +145,10 @@ Route::middleware(['auth', RoleMiddleware::class.':employee'])->prefix('employee
 
     Route::get('/ui/invoices', [EmployeeUiController::class, 'invoices'])->name('employee.ui.invoices');
     Route::get('/ui/transactions', [EmployeeUiController::class, 'transactions'])->name('employee.ui.transactions');
+    Route::get('/ui/cash-closures', [EmployeeUiController::class, 'cashClosures'])->name('employee.ui.cash-closures');
+    Route::post('/ui/cash-closures', [EmployeeUiController::class, 'storeCashClosure'])->name('employee.ui.cash-closures.store');
+    Route::get('/ui/cash-closures/{cashClosure}', [EmployeeUiController::class, 'showCashClosure'])->name('employee.ui.cash-closures.show');
+    Route::post('/ui/transactions/{transaction}/cancel', [EmployeeUiController::class, 'cancelTransaction'])->name('employee.ui.transactions.cancel');
     Route::get('/ui/invoices/{invoice}', [EmployeeUiController::class, 'showInvoice'])->name('employee.ui.invoices.show');
     Route::post('/ui/invoices/{invoice}/delete', [EmployeeUiController::class, 'destroyInvoice'])->name('employee.ui.invoices.delete');
 });

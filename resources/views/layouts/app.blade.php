@@ -28,6 +28,9 @@
 
     $userNotifications = \App\Models\UserNotification::where('user_id', auth()->id())->latest()->limit(15)->get();
     $notifCount += \App\Models\UserNotification::where('user_id', auth()->id())->where('is_read', false)->count();
+    $ownerPressing = auth()->user()->role === \App\Models\User::ROLE_OWNER
+        ? \App\Models\Pressing::find(auth()->user()->pressing_id)
+        : null;
 @endphp
 <nav class="navbar navbar-expand-lg bg-white border-bottom sticky-top">
     <div class="container-fluid container-xl">
@@ -67,8 +70,21 @@
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ route('owner.ui.stats') }}">Statistiques</a></li>
                             <li><a class="dropdown-item" href="{{ route('owner.ui.expenses') }}">Dépenses</a></li>
+                            @if($ownerPressing?->module_cash_closure_enabled)
+                                <li><a class="dropdown-item" href="{{ route('owner.ui.cash-closures') }}">Clôture de caisse</a></li>
+                            @endif
                         </ul>
                     </li>
+
+                    @if($ownerPressing?->module_accounting_enabled)
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle {{ request()->routeIs('owner.ui.accounting.*') ? 'active fw-semibold' : '' }}" href="#" role="button" data-bs-toggle="dropdown">Comptabilité</a>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="{{ route('owner.ui.accounting.settings') }}">Paramètres</a></li>
+                                <li><a class="dropdown-item" href="{{ route('owner.ui.accounting.reports') }}">Bilan</a></li>
+                            </ul>
+                        </li>
+                    @endif
                     <li class="nav-item"><a class="nav-link {{ request()->routeIs('owner.ui.pricing*') ? 'active fw-semibold' : '' }}" href="{{ route('owner.ui.pricing') }}">Abonnement</a></li>
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle {{ request()->routeIs('owner.ui.settings*','owner.ui.agencies*','owner.ui.employees*','owner.ui.services*') ? 'active fw-semibold' : '' }}" href="#" role="button" data-bs-toggle="dropdown">Paramètres</a>
@@ -85,7 +101,15 @@
                     <li class="nav-item"><a class="nav-link {{ request()->routeIs('employee.ui.orders*') ? 'active fw-semibold' : '' }}" href="{{ route('employee.ui.orders') }}">Mes commandes</a></li>
                     <li class="nav-item"><a class="nav-link {{ request()->routeIs('employee.ui.invoices*') ? 'active fw-semibold' : '' }}" href="{{ route('employee.ui.invoices') }}">Mes factures</a></li>
                     <li class="nav-item"><a class="nav-link {{ request()->routeIs('employee.ui.requests*') ? 'active fw-semibold' : '' }}" href="{{ route('employee.ui.requests') }}">Demandes</a></li>
-                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('employee.ui.transactions*') ? 'active fw-semibold' : '' }}" href="{{ route('employee.ui.transactions') }}">Transactions</a></li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {{ request()->routeIs('employee.ui.transactions*','employee.ui.cash-closures*') ? 'active fw-semibold' : '' }}" href="#" role="button" data-bs-toggle="dropdown">Comptabilité</a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ route('employee.ui.transactions') }}">Transactions</a></li>
+                            @if(auth()->user()->pressing?->module_cash_closure_enabled)
+                                <li><a class="dropdown-item" href="{{ route('employee.ui.cash-closures') }}">Clôture</a></li>
+                            @endif
+                        </ul>
+                    </li>
                 @endif
             </ul>
 
