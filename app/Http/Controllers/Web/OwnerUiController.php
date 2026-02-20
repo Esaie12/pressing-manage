@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Agency;
 use App\Models\CategoryExpense;
 use App\Models\CashClosure;
+use App\Models\CashClosureEntry;
 use App\Models\Client;
 use App\Models\EmployeeRequest;
 use App\Models\Expense;
@@ -107,7 +108,8 @@ class OwnerUiController extends Controller
 
         $transactions = Transaction::where('pressing_id', Auth::user()->pressing_id)
             ->where('is_cancelled', false)
-            ->whereDate('happened_at', $data['closure_date']);
+            ->whereDate('happened_at', $data['closure_date'])
+            ->with('order');
 
         $agencyId = $data['agency_id'] ?? null;
         if ($agencyId) {
@@ -124,25 +126,50 @@ class OwnerUiController extends Controller
             $transactions->where('user_id', $employeeId);
         }
 
-        $encaissement = (clone $transactions)->where('type', 'encaissement')->sum('amount');
-        $paiement = (clone $transactions)->where('type', 'paiement')->sum('amount');
-        $count = (clone $transactions)->count();
+        $transactionsList = $transactions->get();
+        $encaissement = (float) $transactionsList->where('type', 'encaissement')->sum('amount');
+        $paiement = (float) $transactionsList->where('type', 'paiement')->sum('amount');
+        $count = $transactionsList->count();
 
-        CashClosure::create([
-            'pressing_id' => Auth::user()->pressing_id,
-            'agency_id' => $agencyId,
-            'employee_id' => $employeeId,
-            'closed_by_user_id' => Auth::id(),
-            'closure_date' => $data['closure_date'],
-            'encaissement_total' => $encaissement,
-            'paiement_total' => $paiement,
-            'net_total' => (float) $encaissement - (float) $paiement,
-            'transactions_count' => $count,
-            'closed_at' => now(),
-            'note' => $data['note'] ?? null,
-        ]);
+        DB::transaction(function () use ($agencyId, $employeeId, $data, $transactionsList, $encaissement, $paiement, $count) {
+            $closure = CashClosure::create([
+                'pressing_id' => Auth::user()->pressing_id,
+                'agency_id' => $agencyId,
+                'employee_id' => $employeeId,
+                'closed_by_user_id' => Auth::id(),
+                'closure_date' => $data['closure_date'],
+                'encaissement_total' => $encaissement,
+                'paiement_total' => $paiement,
+                'net_total' => (float) $encaissement - (float) $paiement,
+                'transactions_count' => $count,
+                'closed_at' => now(),
+                'note' => $data['note'] ?? null,
+            ]);
+
+            foreach ($transactionsList as $tx) {
+                CashClosureEntry::create([
+                    'cash_closure_id' => $closure->id,
+                    'transaction_id' => $tx->id,
+                    'user_id' => $tx->user_id,
+                    'transaction_type' => $tx->type,
+                    'amount' => $tx->amount,
+                    'payment_method' => $tx->payment_method,
+                    'label' => $tx->label,
+                    'order_reference' => $tx->order?->reference,
+                    'happened_at' => $tx->happened_at,
+                ]);
+            }
+        });
 
         return redirect()->route('owner.ui.cash-closures')->with('success', 'Clôture de caisse enregistrée.');
+    }
+
+    public function showCashClosure(CashClosure $cashClosure)
+    {
+        abort_unless($cashClosure->pressing_id === Auth::user()->pressing_id, 403);
+        $cashClosure->load(['agency', 'employee', 'closedBy', 'entries.user']);
+
+        return view('owner.cash-closure-show', ['closure' => $cashClosure]);
     }
 
     public function agencies()

@@ -44,7 +44,7 @@
   <div class="card-header">Historique des clôtures</div>
   <div class="table-responsive">
     <table class="table datatable mb-0 align-middle">
-      <thead><tr><th>Date clôture</th><th>Agence</th><th>Employé</th><th>Encaissements</th><th>Paiements</th><th>Net</th><th>Transactions</th><th>Clôturé par</th></tr></thead>
+      <thead><tr><th>Date clôture</th><th>Agence</th><th>Employé</th><th>Encaissements</th><th>Paiements</th><th>Net</th><th>Transactions</th><th>Clôturé par</th><th>Action</th></tr></thead>
       <tbody>
       @forelse($closures as $closure)
         <tr>
@@ -56,9 +56,10 @@
           <td><strong>{{ number_format($closure->net_total,0,',',' ') }} FCFA</strong></td>
           <td>{{ $closure->transactions_count }}</td>
           <td>{{ $closure->closedBy?->name ?? '-' }}</td>
+          <td><a class="btn btn-sm btn-outline-primary" href="{{ route('owner.ui.cash-closures.show', $closure) }}">Détails</a></td>
         </tr>
       @empty
-        <tr><td colspan="8" class="text-center text-muted">Aucune clôture enregistrée.</td></tr>
+        <tr><td colspan="9" class="text-center text-muted">Aucune clôture enregistrée.</td></tr>
       @endforelse
       </tbody>
     </table>
