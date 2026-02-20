@@ -10,7 +10,6 @@
 </div>
 <div class="list-group">
   <a class="list-group-item list-group-item-action" href="{{ route('admin.ui.owners') }}">Créer/Lister les propriétaires</a>
-  <a class="list-group-item list-group-item-action" href="{{ route('admin.ui.agencies') }}">Lister les agences</a>
   <a class="list-group-item list-group-item-action" href="{{ route('admin.ui.subscriptions') }}">Créer/Lister les abonnements</a>
   <a class="list-group-item list-group-item-action" href="{{ route('admin.ui.pricing') }}">Voir le pricing</a>
 </div>
