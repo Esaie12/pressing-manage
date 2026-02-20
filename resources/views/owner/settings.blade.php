@@ -43,6 +43,21 @@
 
       <div class="col-md-4"><label class="form-label">Couleur principale</label><input type="color" class="form-control form-control-color" name="invoice_primary_color" value="{{ old('invoice_primary_color', $pressing->invoice_primary_color ?? '#0d6efd') }}"></div>
       <div class="col-md-12"><label class="form-label">Message de bienvenue facture</label><input class="form-control" name="invoice_welcome_message" value="{{ old('invoice_welcome_message', $pressing->invoice_welcome_message) }}"></div>
+
+      <div class="col-12"><hr class="my-1"></div>
+      <div class="col-12">
+        <h6 class="mb-2">Annulation des transactions</h6>
+      </div>
+      <div class="col-md-6">
+        <div class="form-check form-switch mt-2">
+          <input class="form-check-input" type="checkbox" role="switch" id="allow_transaction_cancellation" name="allow_transaction_cancellation" value="1" @checked(old('allow_transaction_cancellation', $pressing->allow_transaction_cancellation))>
+          <label class="form-check-label" for="allow_transaction_cancellation">Autoriser l'annulation des transactions</label>
+        </div>
+      </div>
+      <div class="col-md-6" id="cancellationWindowWrapper">
+        <label class="form-label">Fenêtre d'annulation (minutes)</label>
+        <input class="form-control" type="number" min="1" max="1440" name="transaction_cancellation_window_minutes" value="{{ old('transaction_cancellation_window_minutes', $pressing->transaction_cancellation_window_minutes) }}" placeholder="Ex: 30">
+      </div>
       <div class="col-12"><button class="btn btn-primary">Enregistrer</button></div>
     </form>
   </div>
@@ -57,5 +72,17 @@
       card.classList.add('border-primary','border-2');
     });
   });
+
+  const cancellationToggle = document.getElementById('allow_transaction_cancellation');
+  const cancellationWindowWrapper = document.getElementById('cancellationWindowWrapper');
+  const syncCancellationWindow = () => {
+    if (!cancellationToggle || !cancellationWindowWrapper) return;
+    cancellationWindowWrapper.classList.toggle('d-none', !cancellationToggle.checked);
+  };
+  if (cancellationToggle) {
+    cancellationToggle.addEventListener('change', syncCancellationWindow);
+    syncCancellationWindow();
+  }
+
 </script>
 @endsection
