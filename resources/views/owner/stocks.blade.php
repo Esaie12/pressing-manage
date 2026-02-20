@@ -58,9 +58,7 @@
                       </select>
                     </div>
                     <div class="col-md-2"><input type="number" step="0.01" min="0" class="form-control form-control-sm" name="alert_quantity" value="{{ $pressing->stock_mode === 'central' ? ($item->alert_quantity_central ?? 0) : ($item->alert_quantity_agency ?? 0) }}"></div>
-                    <div class="col-md-2 d-flex gap-1">
-                      <button class="btn btn-sm btn-outline-primary">Modifier</button>
-                    </div>
+                    <div class="col-md-2"><button class="btn btn-sm btn-outline-primary">Modifier</button></div>
                   </form>
                 </td>
                 <td>{{ $item->sku ?: '-' }}</td>
@@ -108,9 +106,9 @@
             <div class="col-md-2"><label class="form-label">Qté</label><input class="form-control" type="number" step="0.01" min="0.01" name="quantity" required></div>
             <div class="col-md-3"><label class="form-label">Date</label><input class="form-control" type="date" name="movement_date" value="{{ $selectedDate }}" required></div>
 
-            <div class="col-md-4"><label class="form-label">Emplacement (entrée/sortie/perte)</label><select class="form-select" name="location_agency_id"><option value="">Magasin central</option>@foreach($agencies as $agency)<option value="{{ $agency->id }}">{{ $agency->name }}</option>@endforeach</select></div>
-            <div class="col-md-4"><label class="form-label">Source (transfert)</label><select class="form-select" name="source_agency_id"><option value="">Magasin central</option>@foreach($agencies as $agency)<option value="{{ $agency->id }}">{{ $agency->name }}</option>@endforeach</select></div>
-            <div class="col-md-4"><label class="form-label">Destination (transfert)</label><select class="form-select" name="target_agency_id"><option value="">Magasin central</option>@foreach($agencies as $agency)<option value="{{ $agency->id }}">{{ $agency->name }}</option>@endforeach</select></div>
+            <div class="col-md-6"><label class="form-label">Source</label><select class="form-select" name="source_agency_id"><option value="">Magasin central</option>@foreach($agencies as $agency)<option value="{{ $agency->id }}">{{ $agency->name }}</option>@endforeach</select></div>
+            <div class="col-md-6"><label class="form-label">Destination</label><select class="form-select" name="target_agency_id"><option value="">Magasin central</option>@foreach($agencies as $agency)<option value="{{ $agency->id }}">{{ $agency->name }}</option>@endforeach</select></div>
+            <div class="col-12"><div class="small text-muted">Entrée: utiliser Destination. Sortie/Perte: utiliser Source. Transfert: Source + Destination.</div></div>
 
             <div class="col-md-12"><label class="form-label">Note</label><input class="form-control" name="note"></div>
             <div class="col-12"><button class="btn btn-success">Enregistrer mouvement</button></div>
@@ -118,35 +116,113 @@
         </div>
       </div>
 
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <form method="GET" class="row g-2 align-items-end">
+            <input type="hidden" name="section" value="mouvements">
+            <div class="col-md-4">
+              <label class="form-label">Filtre emplacement</label>
+              <select class="form-select" name="scope">
+                <option value="all" @selected($scope === 'all')>Tous</option>
+                <option value="central" @selected($scope === 'central')>Magasin central</option>
+                @foreach($agencies as $agency)
+                  <option value="{{ $agency->id }}" @selected((string)$scope === (string)$agency->id)>{{ $agency->name }}</option>
+                @endforeach
+              </select>
+            </div>
+            <div class="col-md-2"><button class="btn btn-outline-primary">Filtrer</button></div>
+            <div class="col-md-6 text-md-end small text-muted">Modification/Suppression possible pendant {{ (int)($canEditWindowMinutes / 60) }}h après création.</div>
+          </form>
+        </div>
+      </div>
+
       <div class="card shadow-sm">
         <div class="card-header">Derniers mouvements</div>
         <div class="table-responsive">
-          <table class="table mb-0">
-            <thead><tr><th>Date</th><th>Article</th><th>Type</th><th>Détail</th><th class="text-end">Qté</th><th>Saisi par</th></tr></thead>
+          <table class="table mb-0 align-middle">
+            <thead><tr><th>Date</th><th>Article</th><th>Type</th><th>Détail</th><th class="text-end">Qté</th><th>Saisi par</th><th></th></tr></thead>
             <tbody>
             @forelse($movements as $m)
+              @php
+                $typeClass = match($m->movement_type) {
+                  'entree' => 'text-bg-success',
+                  'sortie' => 'text-bg-warning',
+                  'transfert' => 'text-bg-primary',
+                  'perte_casse' => 'text-bg-danger',
+                  default => 'text-bg-secondary',
+                };
+                $canManage = $m->created_at && $m->created_at->gte(now()->subHours(3));
+              @endphp
               <tr>
                 <td>{{ optional($m->movement_date)->format('d/m/Y') }}</td>
                 <td>{{ $m->item?->name }}</td>
-                <td>{{ ucfirst(str_replace('_',' / ', $m->movement_type)) }}</td>
+                <td><span class="badge {{ $typeClass }}">{{ ucfirst(str_replace('_',' / ', $m->movement_type)) }}</span></td>
                 <td>
                   @if($m->movement_type === 'transfert')
                     {{ $m->sourceAgency?->name ?? 'Magasin central' }} → {{ $m->targetAgency?->name ?? 'Magasin central' }}
                   @else
                     {{ $m->agency?->name ?? 'Magasin central' }}
                   @endif
+                  @if($m->note)<div class="small text-muted">{{ $m->note }}</div>@endif
                 </td>
                 <td class="text-end">{{ number_format((float)$m->quantity,2,',',' ') }}</td>
                 <td>{{ $m->user?->name ?? '-' }}</td>
+                <td class="text-end">
+                  @if($canManage)
+                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#edit-{{ $m->id }}">Modifier</button>
+                    <form method="POST" action="{{ route('owner.ui.stocks.movements.delete', $m) }}" class="d-inline" onsubmit="return confirm('Supprimer ce mouvement ?')">
+                      @csrf
+                      <button class="btn btn-sm btn-outline-danger">Supprimer</button>
+                    </form>
+                  @else
+                    <span class="badge text-bg-secondary">Verrouillé</span>
+                  @endif
+                </td>
               </tr>
+              @if($canManage)
+                <tr class="collapse" id="edit-{{ $m->id }}">
+                  <td colspan="7" class="bg-light">
+                    <form method="POST" action="{{ route('owner.ui.stocks.movements.update', $m) }}" class="row g-2 align-items-end">
+                      @csrf
+                      <div class="col-md-3"><label class="form-label">Article</label><select class="form-select form-select-sm" name="stock_item_id" required>@foreach($activeItems as $item)<option value="{{ $item->id }}" @selected($m->stock_item_id === $item->id)>{{ $item->name }}</option>@endforeach</select></div>
+                      <div class="col-md-2"><label class="form-label">Type</label><select class="form-select form-select-sm" name="movement_type" required><option value="entree" @selected($m->movement_type==='entree')>Entrée</option><option value="sortie" @selected($m->movement_type==='sortie')>Sortie</option><option value="transfert" @selected($m->movement_type==='transfert')>Transfert</option><option value="perte_casse" @selected($m->movement_type==='perte_casse')>Perte / casse</option></select></div>
+                      <div class="col-md-2"><label class="form-label">Qté</label><input class="form-control form-control-sm" type="number" step="0.01" min="0.01" name="quantity" value="{{ $m->quantity }}" required></div>
+                      <div class="col-md-2"><label class="form-label">Date</label><input class="form-control form-control-sm" type="date" name="movement_date" value="{{ optional($m->movement_date)->format('Y-m-d') }}" required></div>
+                      <div class="col-md-3"><label class="form-label">Note</label><input class="form-control form-control-sm" name="note" value="{{ $m->note }}"></div>
+                      <div class="col-md-4"><label class="form-label">Source</label><select class="form-select form-select-sm" name="source_agency_id"><option value="">Magasin central</option>@foreach($agencies as $agency)<option value="{{ $agency->id }}" @selected($m->movement_type === 'transfert' ? $m->source_agency_id === $agency->id : $m->agency_id === $agency->id)>{{ $agency->name }}</option>@endforeach</select></div>
+                      <div class="col-md-4"><label class="form-label">Destination</label><select class="form-select form-select-sm" name="target_agency_id"><option value="">Magasin central</option>@foreach($agencies as $agency)<option value="{{ $agency->id }}" @selected($m->movement_type === 'transfert' ? $m->target_agency_id === $agency->id : $m->agency_id === $agency->id)>{{ $agency->name }}</option>@endforeach</select></div>
+                      <div class="col-md-4"><button class="btn btn-sm btn-primary">Enregistrer modif</button></div>
+                    </form>
+                  </td>
+                </tr>
+              @endif
             @empty
-              <tr><td colspan="6" class="text-center text-muted py-3">Aucun mouvement.</td></tr>
+              <tr><td colspan="7" class="text-center text-muted py-3">Aucun mouvement.</td></tr>
             @endforelse
             </tbody>
           </table>
         </div>
       </div>
     @else
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <form method="GET" class="row g-2 align-items-end">
+            <input type="hidden" name="section" value="stock">
+            <div class="col-md-4">
+              <label class="form-label">Afficher stock pour</label>
+              <select class="form-select" name="scope">
+                <option value="all" @selected($scope === 'all')>Tous les emplacements</option>
+                <option value="central" @selected($scope === 'central')>Magasin central</option>
+                @foreach($agencies as $agency)
+                  <option value="{{ $agency->id }}" @selected((string)$scope === (string)$agency->id)>{{ $agency->name }}</option>
+                @endforeach
+              </select>
+            </div>
+            <div class="col-md-2"><button class="btn btn-outline-primary">Filtrer</button></div>
+          </form>
+        </div>
+      </div>
+
       <div class="card shadow-sm">
         <div class="card-header">Soldes de stock</div>
         <div class="table-responsive">

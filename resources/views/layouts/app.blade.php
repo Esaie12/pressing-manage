@@ -179,6 +179,13 @@
     @yield('content')
 </main>
 
+<footer class="border-top bg-white py-3 mt-4">
+    <div class="container-xl small text-muted d-flex flex-wrap justify-content-between">
+        <span>© {{ date('Y') }} Pressing Platform</span>
+        <span>Fait avec ❤️ pour votre pressing</span>
+    </div>
+</footer>
+
 <div class="toast-container position-fixed top-0 end-0 p-3">
     @if(session('success'))<div class="toast align-items-center text-bg-success border-0 js-toast" role="alert" aria-live="assertive" aria-atomic="true"><div class="d-flex"><div class="toast-body">{{ session('success') }}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>@endif
     @if(session('error'))<div class="toast align-items-center text-bg-danger border-0 js-toast" role="alert" aria-live="assertive" aria-atomic="true"><div class="d-flex"><div class="toast-body">{{ session('error') }}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>@endif
