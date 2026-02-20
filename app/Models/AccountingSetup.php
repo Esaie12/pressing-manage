@@ -22,6 +22,7 @@ class AccountingSetup extends Model
         'operating_debts',
         'fixed_asset_debts',
         'other_debts',
+        'employee_salaries',
         'notes',
     ];
 
@@ -39,6 +40,7 @@ class AccountingSetup extends Model
         'operating_debts' => 'decimal:2',
         'fixed_asset_debts' => 'decimal:2',
         'other_debts' => 'decimal:2',
+        'employee_salaries' => 'decimal:2',
     ];
 
     public function agency()

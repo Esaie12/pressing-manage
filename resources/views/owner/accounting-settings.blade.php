@@ -41,6 +41,7 @@
       <div class="col-md-4"><label class="form-label">Dettes d'exploitation</label><input class="form-control" type="number" step="0.01" min="0" name="operating_debts" value="{{ old('operating_debts', $setup?->operating_debts ?? 0) }}"></div>
       <div class="col-md-4"><label class="form-label">Dettes sur immobilisations</label><input class="form-control" type="number" step="0.01" min="0" name="fixed_asset_debts" value="{{ old('fixed_asset_debts', $setup?->fixed_asset_debts ?? 0) }}"></div>
       <div class="col-md-4"><label class="form-label">Autres dettes</label><input class="form-control" type="number" step="0.01" min="0" name="other_debts" value="{{ old('other_debts', $setup?->other_debts ?? 0) }}"></div>
+      <div class="col-md-4"><label class="form-label">Salaires des employés</label><input class="form-control" type="number" step="0.01" min="0" name="employee_salaries" value="{{ old('employee_salaries', $setup?->employee_salaries ?? 0) }}"></div>
 
       <div class="col-12"><label class="form-label">Notes</label><textarea class="form-control" name="notes" rows="3">{{ old('notes', $setup?->notes) }}</textarea></div>
       <div class="col-12"><button class="btn btn-primary">Enregistrer paramètres</button></div>
