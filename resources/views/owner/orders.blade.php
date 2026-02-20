@@ -70,10 +70,17 @@
             <td>{{ number_format($remaining,0,',',' ') }}</td>
             <td><span class="badge bg-{{ $status->badge_class ?? 'secondary' }}{{ ($status?->badge_class==='warning') ? ' text-dark' : '' }}">{{ $status->label ?? $order->status }}</span></td>
             <td class="d-flex gap-1 flex-wrap">
-              <a class="btn btn-sm btn-outline-primary" href="{{ route('owner.ui.orders.edit', $order) }}">Modifier</a>
-              <button class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#payModal{{ $order->id }}">Paiement</button>
-              <form method="POST" action="{{ route('owner.ui.orders.ready', $order) }}">@csrf<button class="btn btn-sm btn-outline-primary">Prête</button></form><form method="POST" action="{{ route('owner.ui.orders.picked', $order) }}">@csrf<button class="btn btn-sm btn-outline-success">Retirée</button></form>
-              <form method="POST" action="{{ route('owner.ui.orders.delete', $order) }}">@csrf<button class="btn btn-sm btn-outline-danger" type="submit">Supprimer</button></form>
+              @if($order->status === 'pending')
+                <a class="btn btn-sm btn-outline-primary" href="{{ route('owner.ui.orders.edit', $order) }}">Modifier</a>
+                @if($remaining > 0)
+                  <button class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#payModal{{ $order->id }}">Paiement</button>
+                @endif
+                <form method="POST" action="{{ route('owner.ui.orders.ready', $order) }}">@csrf<button class="btn btn-sm btn-outline-primary">Prête</button></form>
+                @if($remaining <= 0)
+                  <form method="POST" action="{{ route('owner.ui.orders.picked', $order) }}">@csrf<button class="btn btn-sm btn-outline-success">Retirée</button></form>
+                @endif
+                <form method="POST" action="{{ route('owner.ui.orders.delete', $order) }}">@csrf<button class="btn btn-sm btn-outline-danger" type="submit">Supprimer</button></form>
+              @endif
             </td>
           </tr>
         @empty
@@ -86,7 +93,10 @@
 </div>
 
 @foreach($orders as $order)
+@php $remaining=max(0,(float)$order->total-(float)$order->advance_amount); @endphp
+@if($remaining > 0)
 <div class="modal fade" id="payModal{{ $order->id }}" tabindex="-1" aria-hidden="true"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Paiement {{ $order->reference }}</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form method="POST" action="{{ route('owner.ui.orders.payments.store', $order) }}" class="vstack gap-2">@csrf<input class="form-control" type="number" min="1" step="0.01" name="amount" placeholder="Montant" required><select class="form-select" name="payment_method"><option value="">Moyen de paiement</option><option value="cash">Cash</option><option value="wave">Wave</option><option value="orange_money">Orange Money</option><option value="card">Carte</option></select><button class="btn btn-warning">Valider paiement</button></form></div></div></div></div>
+@endif
 
 @endforeach
 

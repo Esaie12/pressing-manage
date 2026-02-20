@@ -16,11 +16,17 @@ class Transaction extends Model
         'amount',
         'payment_method',
         'label',
+        'is_cancelled',
+        'cancelled_by_user_id',
+        'cancelled_at',
+        'cancellation_note',
         'happened_at',
     ];
 
     protected $casts = [
         'amount' => 'decimal:2',
+        'is_cancelled' => 'boolean',
+        'cancelled_at' => 'datetime',
         'happened_at' => 'datetime',
     ];
 
@@ -42,5 +48,10 @@ class Transaction extends Model
     public function expense()
     {
         return $this->belongsTo(Expense::class);
+    }
+
+    public function cancelledBy()
+    {
+        return $this->belongsTo(User::class, 'cancelled_by_user_id');
     }
 }

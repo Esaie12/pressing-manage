@@ -319,6 +319,7 @@ class OwnerUiController extends Controller
     {
         $order->load(['items.service', 'agency', 'client']);
         abort_unless($order->agency && $order->agency->pressing_id === Auth::user()->pressing_id, 403);
+        abort_if($order->status !== 'pending', 422, 'Seules les commandes en attente peuvent être modifiées.');
 
         return view('owner.order-edit', [
             'order' => $order,
@@ -331,6 +332,7 @@ class OwnerUiController extends Controller
     {
         $order->load('agency');
         abort_unless($order->agency && $order->agency->pressing_id === Auth::user()->pressing_id, 403);
+        abort_if($order->status !== 'pending', 422, 'Seules les commandes en attente peuvent être modifiées.');
 
         $data = $this->validateOrderPayload($request);
         $agency = Agency::where('id', $data['agency_id'])
@@ -362,6 +364,7 @@ class OwnerUiController extends Controller
     {
         $order->load('agency');
         abort_unless($order->agency && $order->agency->pressing_id === Auth::user()->pressing_id, 403);
+        abort_if($order->status !== 'pending', 422, 'Seules les commandes en attente peuvent être supprimées.');
 
         $order->delete();
 
@@ -373,6 +376,7 @@ class OwnerUiController extends Controller
     {
         $order->load('agency');
         abort_unless($order->agency && $order->agency->pressing_id === Auth::user()->pressing_id, 403);
+        abort_if($order->status !== 'pending', 422, 'Seules les commandes en attente peuvent être marquées prêtes.');
 
         $order->update(['status' => 'ready', 'ready_at' => now()]);
 
@@ -383,6 +387,7 @@ class OwnerUiController extends Controller
     {
         $order->load('agency');
         abort_unless($order->agency && $order->agency->pressing_id === Auth::user()->pressing_id, 403);
+        abort_if($order->status !== 'pending', 422, 'Seules les commandes en attente peuvent être marquées retirées.');
 
         if ((float) $order->advance_amount < (float) $order->total) {
             return redirect()->route('owner.ui.orders')->with('error', 'Commande non totalement payée.');
@@ -434,13 +439,46 @@ class OwnerUiController extends Controller
 
     public function transactions()
     {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+
         return view('owner.transactions', [
             'transactions' => Transaction::where('pressing_id', Auth::user()->pressing_id)
-                ->with(['agency', 'user', 'order', 'expense'])
+                ->with(['agency', 'user', 'order', 'expense', 'cancelledBy'])
                 ->latest('happened_at')
                 ->latest()
                 ->get(),
+            'pressing' => $pressing,
         ]);
+    }
+
+    public function cancelTransaction(Request $request, Transaction $transaction)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_unless($transaction->pressing_id === $pressing->id, 403);
+
+        if (! $this->canCancelTransaction($pressing, $transaction)) {
+            return redirect()->route('owner.ui.transactions')->with('error', 'Cette transaction ne peut plus être annulée.');
+        }
+
+        DB::transaction(function () use ($transaction) {
+            if ($transaction->type === 'encaissement' && $transaction->order_id) {
+                $order = Order::lockForUpdate()->find($transaction->order_id);
+                if ($order) {
+                    $order->advance_amount = max(0, (float) $order->advance_amount - (float) $transaction->amount);
+                    $order->paid_advance = (float) $order->advance_amount > 0;
+                    $order->save();
+                }
+            }
+
+            $transaction->update([
+                'is_cancelled' => true,
+                'cancelled_by_user_id' => Auth::id(),
+                'cancelled_at' => now(),
+                'cancellation_note' => 'Annulée par le propriétaire.',
+            ]);
+        });
+
+        return redirect()->route('owner.ui.transactions')->with('success', 'Transaction annulée.');
     }
 
     public function invoices()
@@ -480,6 +518,8 @@ class OwnerUiController extends Controller
             'invoice_logo' => ['nullable', 'image', 'max:2048'],
             'opening_time' => ['nullable', 'date_format:H:i'],
             'closing_time' => ['nullable', 'date_format:H:i'],
+            'allow_transaction_cancellation' => ['nullable', 'boolean'],
+            'transaction_cancellation_window_minutes' => ['nullable', 'required_if:allow_transaction_cancellation,1', 'integer', 'min:1', 'max:1440'],
         ]);
 
         $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
@@ -489,6 +529,11 @@ class OwnerUiController extends Controller
         }
 
         unset($data['invoice_logo']);
+
+        $data['allow_transaction_cancellation'] = (bool) ($data['allow_transaction_cancellation'] ?? false);
+        if (! $data['allow_transaction_cancellation']) {
+            $data['transaction_cancellation_window_minutes'] = null;
+        }
 
         $pressing->update($data);
 
@@ -838,5 +883,21 @@ class OwnerUiController extends Controller
         }
 
         return [$order, $total];
+    }
+
+    private function canCancelTransaction(Pressing $pressing, Transaction $transaction): bool
+    {
+        if (! $pressing->allow_transaction_cancellation || $transaction->is_cancelled) {
+            return false;
+        }
+
+        $window = (int) ($pressing->transaction_cancellation_window_minutes ?? 0);
+        if ($window <= 0) {
+            return false;
+        }
+
+        $referenceTime = $transaction->happened_at ?? $transaction->created_at;
+
+        return now()->lessThanOrEqualTo($referenceTime->copy()->addMinutes($window));
     }
 }

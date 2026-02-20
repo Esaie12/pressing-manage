@@ -92,6 +92,7 @@ Route::middleware(['auth', RoleMiddleware::class.':owner'])->prefix('owner')->gr
 
     Route::get('/ui/invoices', [OwnerUiController::class, 'invoices'])->name('owner.ui.invoices');
     Route::get('/ui/transactions', [OwnerUiController::class, 'transactions'])->name('owner.ui.transactions');
+    Route::post('/ui/transactions/{transaction}/cancel', [OwnerUiController::class, 'cancelTransaction'])->name('owner.ui.transactions.cancel');
     Route::get('/ui/invoices/{invoice}', [OwnerUiController::class, 'showInvoice'])->name('owner.ui.invoices.show');
 
     Route::get('/ui/settings', [OwnerUiController::class, 'settings'])->name('owner.ui.settings');
@@ -133,6 +134,7 @@ Route::middleware(['auth', RoleMiddleware::class.':employee'])->prefix('employee
 
     Route::get('/ui/invoices', [EmployeeUiController::class, 'invoices'])->name('employee.ui.invoices');
     Route::get('/ui/transactions', [EmployeeUiController::class, 'transactions'])->name('employee.ui.transactions');
+    Route::post('/ui/transactions/{transaction}/cancel', [EmployeeUiController::class, 'cancelTransaction'])->name('employee.ui.transactions.cancel');
     Route::get('/ui/invoices/{invoice}', [EmployeeUiController::class, 'showInvoice'])->name('employee.ui.invoices.show');
     Route::post('/ui/invoices/{invoice}/delete', [EmployeeUiController::class, 'destroyInvoice'])->name('employee.ui.invoices.delete');
 });
