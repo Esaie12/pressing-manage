@@ -119,6 +119,7 @@ Route::middleware(['auth', RoleMiddleware::class.':owner'])->prefix('owner')->gr
     Route::post('/ui/stocks/items/{stockItem}', [OwnerUiController::class, 'updateStockItem'])->name('owner.ui.stocks.items.update');
     Route::post('/ui/stocks/items/{stockItem}/delete', [OwnerUiController::class, 'destroyStockItem'])->name('owner.ui.stocks.items.delete');
     Route::post('/ui/stocks/movements', [OwnerUiController::class, 'storeStockMovement'])->name('owner.ui.stocks.movements.store');
+    Route::get('/ui/stocks/movements/{stockMovement}/edit', [OwnerUiController::class, 'editStockMovement'])->name('owner.ui.stocks.movements.edit');
     Route::post('/ui/stocks/movements/{stockMovement}', [OwnerUiController::class, 'updateStockMovement'])->name('owner.ui.stocks.movements.update');
     Route::post('/ui/stocks/movements/{stockMovement}/delete', [OwnerUiController::class, 'destroyStockMovement'])->name('owner.ui.stocks.movements.delete');
 

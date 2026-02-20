@@ -9,7 +9,7 @@
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
     <style>
-        body { background: #f5f7fb; }
+        body { background: #f5f7fb; min-height: 100vh; display: flex; flex-direction: column; }
         .navbar-brand small { display:block; font-size:.7rem; letter-spacing:.08em; text-transform: uppercase; }
         .stat-card { border:0; border-radius: 1rem; }
         .toast-container { z-index: 2000; }
@@ -171,7 +171,7 @@
 </div>
 @endauth
 
-<main class="container-xl py-4">
+<main class="container-xl py-4 flex-grow-1">
     @if($errors->any())
         <div class="alert alert-danger"><ul class="mb-0">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>
     @endif
@@ -179,7 +179,7 @@
     @yield('content')
 </main>
 
-<footer class="border-top bg-white py-3 mt-4">
+<footer class="border-top bg-white py-3 mt-auto">
     <div class="container-xl small text-muted d-flex flex-wrap justify-content-between">
         <span>© {{ date('Y') }} Pressing Platform</span>
         <span>Fait avec ❤️ pour votre pressing</span>

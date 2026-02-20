@@ -153,6 +153,15 @@ class OwnerUiController extends Controller
             ->orderByDesc('agency_id')
             ->get();
 
+        $statsScopeBalances = StockBalance::where('pressing_id', $pressing->id)
+            ->when($scope === 'central', fn ($q) => $q->whereNull('agency_id'))
+            ->when($scope !== 'all' && $scope !== 'central', fn ($q) => $q->where('agency_id', $scope))
+            ->get();
+
+        $totalArticles = $items->count();
+        $inStockArticles = $statsScopeBalances->where('quantity', '>', 0)->pluck('stock_item_id')->unique()->count();
+        $outOfStockArticles = max($totalArticles - $inStockArticles, 0);
+
         return view('owner.stocks', [
             'pressing' => $pressing,
             'agencies' => $agencies,
@@ -164,6 +173,9 @@ class OwnerUiController extends Controller
             'section' => in_array($section, ['articles', 'mouvements', 'stock'], true) ? $section : 'articles',
             'scope' => $scope,
             'canEditWindowMinutes' => 180,
+            'totalArticles' => $totalArticles,
+            'inStockArticles' => $inStockArticles,
+            'outOfStockArticles' => $outOfStockArticles,
         ]);
     }
 
@@ -276,6 +288,22 @@ class OwnerUiController extends Controller
         });
 
         return redirect()->route('owner.ui.stocks', ['section' => 'mouvements'])->with('success', 'Mouvement de stock enregistré.');
+    }
+
+    public function editStockMovement(StockMovement $stockMovement)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if($stockMovement->pressing_id !== $pressing->id, 403);
+
+        if (! $this->canEditStockMovement($stockMovement)) {
+            return redirect()->route('owner.ui.stocks', ['section' => 'mouvements'])->with('error', 'Modification autorisée uniquement dans les 3h suivant la création.');
+        }
+
+        return view('owner.stock-movement-edit', [
+            'movement' => $stockMovement->load(['item', 'sourceAgency', 'targetAgency']),
+            'agencies' => Agency::where('pressing_id', $pressing->id)->orderBy('name')->get(),
+            'items' => StockItem::where('pressing_id', $pressing->id)->where('is_active', true)->orderBy('name')->get(),
+        ]);
     }
 
     public function updateStockMovement(Request $request, StockMovement $stockMovement)

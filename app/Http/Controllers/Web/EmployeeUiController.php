@@ -195,6 +195,7 @@ class EmployeeUiController extends Controller
         abort_if(! $employee->pressing?->module_stock_enabled, 403, 'Module Stock non activé.');
 
         $date = $request->query('movement_date', now()->toDateString());
+        $section = $request->query('section', 'stock');
 
         $outgoing = StockMovement::where('pressing_id', $employee->pressing_id)
             ->where('user_id', $employee->id)
@@ -210,14 +211,22 @@ class EmployeeUiController extends Controller
             ->orderBy('stock_item_id')
             ->get();
 
+        $items = StockItem::where('pressing_id', $employee->pressing_id)->where('is_active', true)->orderBy('name')->get();
+        $totalArticles = $items->count();
+        $inStockArticles = $agencyBalances->where('quantity', '>', 0)->pluck('stock_item_id')->unique()->count();
+
         return view('employee.stock-daily', [
             'movementDate' => $date,
             'outgoing' => $outgoing,
             'totalOutgoing' => (float) $outgoing->sum('quantity'),
-            'items' => StockItem::where('pressing_id', $employee->pressing_id)->where('is_active', true)->orderBy('name')->get(),
+            'items' => $items,
             'agencyBalances' => $agencyBalances,
             'stockMode' => $employee->pressing->stock_mode,
             'employeeAgencyId' => $employee->agency_id,
+            'section' => in_array($section, ['stock', 'sortie'], true) ? $section : 'stock',
+            'totalArticles' => $totalArticles,
+            'inStockArticles' => $inStockArticles,
+            'outOfStockArticles' => max($totalArticles - $inStockArticles, 0),
         ]);
     }
 
@@ -266,7 +275,7 @@ class EmployeeUiController extends Controller
             ]);
         });
 
-        return redirect()->route('employee.ui.stock.daily', ['movement_date' => $data['movement_date']])->with('success', 'Sortie enregistrée.');
+        return redirect()->route('employee.ui.stock.daily', ['movement_date' => $data['movement_date'], 'section' => 'sortie'])->with('success', 'Sortie enregistrée.');
     }
 
     
