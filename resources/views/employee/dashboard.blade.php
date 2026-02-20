@@ -7,6 +7,13 @@
   @if($closingAlert)<span class="small">{{ $closingAlert }}</span>@endif
 </div>
 
+@if(!empty($cashClosureAlert))
+  <div class="alert alert-warning d-flex justify-content-between align-items-center">
+    <div>{{ $cashClosureAlert }}</div>
+    <a class="btn btn-sm btn-outline-warning" href="{{ route('employee.ui.cash-closures') }}">Aller à la clôture</a>
+  </div>
+@endif
+
 <div class="card shadow-sm mb-3">
   <div class="card-body">
     <form class="row g-2 align-items-end" method="GET" action="{{ route('employee.ui.dashboard') }}">
