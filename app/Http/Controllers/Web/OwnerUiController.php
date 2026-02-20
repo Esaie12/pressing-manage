@@ -104,6 +104,33 @@ class OwnerUiController extends Controller
             'selectedAgencyId' => $agencyId,
             'setup' => $setup,
         ]);
+
+        $agencyId = $data['agency_id'] ?? null;
+        if ($agencyId) {
+            Agency::where('id', $agencyId)->where('pressing_id', $pressing->id)->firstOrFail();
+        }
+
+        AccountingSetup::updateOrCreate(
+            ['pressing_id' => $pressing->id, 'agency_id' => $agencyId],
+            [
+                'capital' => (float) ($data['capital'] ?? 0),
+                'reserves' => (float) ($data['reserves'] ?? 0),
+                'retained_earnings' => (float) ($data['retained_earnings'] ?? 0),
+                'intangible_assets' => (float) ($data['intangible_assets'] ?? 0),
+                'tangible_assets' => (float) ($data['tangible_assets'] ?? 0),
+                'financial_assets' => (float) ($data['financial_assets'] ?? 0),
+                'stocks' => (float) ($data['stocks'] ?? 0),
+                'receivables' => (float) ($data['receivables'] ?? 0),
+                'treasury' => (float) ($data['treasury'] ?? 0),
+                'financial_debts' => (float) ($data['financial_debts'] ?? 0),
+                'operating_debts' => (float) ($data['operating_debts'] ?? 0),
+                'fixed_asset_debts' => (float) ($data['fixed_asset_debts'] ?? 0),
+                'other_debts' => (float) ($data['other_debts'] ?? 0),
+                'notes' => $data['notes'] ?? null,
+            ]
+        );
+
+        return redirect()->route('owner.ui.accounting.settings', ['agency_id' => $agencyId])->with('success', 'Paramètres de comptabilité enregistrés.');
     }
 
     public function saveAccountingSettings(Request $request)
