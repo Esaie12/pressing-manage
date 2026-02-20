@@ -83,10 +83,10 @@
   new Chart(document.getElementById('statusChart'), {
     type: 'doughnut',
     data: {
-      labels: ['Créées', 'Prêtes', 'Retirées'],
+      labels: ['Attente', 'Prêtes', 'Retirées'],
       datasets: [{
-        data: [statusDistribution.created, statusDistribution.ready, statusDistribution.picked_up],
-        backgroundColor: ['#0d6efd', '#ffc107', '#198754']
+        data: [statusDistribution.pending, statusDistribution.ready, statusDistribution.picked_up],
+        backgroundColor: ['#ffc107', '#0d6efd', '#198754']
       }]
     },
     options: { responsive: true, maintainAspectRatio: false }

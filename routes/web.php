@@ -65,6 +65,7 @@ Route::middleware(['auth', RoleMiddleware::class.':owner'])->prefix('owner')->gr
     Route::get('/stats', [OrderController::class, 'stats']);
 
     Route::get('/ui/dashboard', [OwnerUiController::class, 'dashboard'])->name('owner.ui.dashboard');
+    Route::post('/ui/modules/cash-closure/toggle', [OwnerUiController::class, 'toggleCashClosureModule'])->name('owner.ui.modules.cash-closure.toggle');
     Route::get('/ui/agencies', [OwnerUiController::class, 'agencies'])->name('owner.ui.agencies');
     Route::post('/ui/agencies', [OwnerUiController::class, 'storeAgency'])->name('owner.ui.agencies.store');
     Route::post('/ui/agencies/{agency}/toggle', [OwnerUiController::class, 'toggleAgency'])->name('owner.ui.agencies.toggle');
@@ -72,17 +73,27 @@ Route::middleware(['auth', RoleMiddleware::class.':owner'])->prefix('owner')->gr
     Route::get('/ui/employees', [OwnerUiController::class, 'employees'])->name('owner.ui.employees');
     Route::post('/ui/employees', [OwnerUiController::class, 'storeEmployee'])->name('owner.ui.employees.store');
     Route::post('/ui/employees/{employee}/toggle', [OwnerUiController::class, 'toggleEmployee'])->name('owner.ui.employees.toggle');
+    Route::post('/ui/employees/{employee}/password', [OwnerUiController::class, 'updateEmployeePassword'])->name('owner.ui.employees.password');
 
     Route::get('/ui/services', [OwnerUiController::class, 'services'])->name('owner.ui.services');
     Route::post('/ui/services', [OwnerUiController::class, 'storeService'])->name('owner.ui.services.store');
+    Route::post('/ui/services/{service}', [OwnerUiController::class, 'updateService'])->name('owner.ui.services.update');
+    Route::post('/ui/services/{service}/toggle', [OwnerUiController::class, 'toggleService'])->name('owner.ui.services.toggle');
+    Route::post('/ui/services/{service}/delete', [OwnerUiController::class, 'destroyService'])->name('owner.ui.services.delete');
+    Route::post('/ui/services/{service}/force-delete', [OwnerUiController::class, 'forceDeleteService'])->name('owner.ui.services.forceDelete');
 
     Route::get('/ui/orders', [OwnerUiController::class, 'orders'])->name('owner.ui.orders');
+    Route::post('/ui/orders/{order}/payments', [OwnerUiController::class, 'addPayment'])->name('owner.ui.orders.payments.store');
     Route::post('/ui/orders', [OwnerUiController::class, 'storeOrder'])->name('owner.ui.orders.store');
     Route::get('/ui/orders/{order}/edit', [OwnerUiController::class, 'editOrder'])->name('owner.ui.orders.edit');
     Route::post('/ui/orders/{order}', [OwnerUiController::class, 'updateOrder'])->name('owner.ui.orders.update');
     Route::post('/ui/orders/{order}/delete', [OwnerUiController::class, 'destroyOrder'])->name('owner.ui.orders.delete');
+    Route::post('/ui/orders/{order}/ready', [OwnerUiController::class, 'markReady'])->name('owner.ui.orders.ready');
+    Route::post('/ui/orders/{order}/picked-up', [OwnerUiController::class, 'markPickedUp'])->name('owner.ui.orders.picked');
 
     Route::get('/ui/invoices', [OwnerUiController::class, 'invoices'])->name('owner.ui.invoices');
+    Route::get('/ui/transactions', [OwnerUiController::class, 'transactions'])->name('owner.ui.transactions');
+    Route::post('/ui/transactions/{transaction}/cancel', [OwnerUiController::class, 'cancelTransaction'])->name('owner.ui.transactions.cancel');
     Route::get('/ui/invoices/{invoice}', [OwnerUiController::class, 'showInvoice'])->name('owner.ui.invoices.show');
 
     Route::get('/ui/settings', [OwnerUiController::class, 'settings'])->name('owner.ui.settings');
@@ -97,6 +108,8 @@ Route::middleware(['auth', RoleMiddleware::class.':owner'])->prefix('owner')->gr
     Route::post('/ui/expenses', [OwnerUiController::class, 'storeExpense'])->name('owner.ui.expenses.store');
     Route::post('/ui/expenses/{expense}', [OwnerUiController::class, 'updateExpense'])->name('owner.ui.expenses.update');
     Route::post('/ui/expenses/{expense}/delete', [OwnerUiController::class, 'destroyExpense'])->name('owner.ui.expenses.delete');
+    Route::get('/ui/cash-closures', [OwnerUiController::class, 'cashClosures'])->name('owner.ui.cash-closures');
+    Route::post('/ui/cash-closures', [OwnerUiController::class, 'storeCashClosure'])->name('owner.ui.cash-closures.store');
 
     Route::get('/ui/pricing', [OwnerUiController::class, 'pricing'])->name('owner.ui.pricing');
     Route::post('/ui/pricing/subscribe', [OwnerUiController::class, 'subscribePlan'])->name('owner.ui.pricing.subscribe');
@@ -116,12 +129,15 @@ Route::middleware(['auth', RoleMiddleware::class.':employee'])->prefix('employee
 
     Route::get('/ui/orders', [EmployeeUiController::class, 'orders'])->name('employee.ui.orders');
     Route::post('/ui/orders', [EmployeeUiController::class, 'storeOrder'])->name('employee.ui.orders.store');
+    Route::get('/ui/orders/{order}/edit', [EmployeeUiController::class, 'editOrder'])->name('employee.ui.orders.edit');
+    Route::post('/ui/orders/{order}', [EmployeeUiController::class, 'updateOrder'])->name('employee.ui.orders.update');
     Route::post('/ui/orders/{order}/ready', [EmployeeUiController::class, 'markReady'])->name('employee.ui.orders.ready');
     Route::post('/ui/orders/{order}/picked-up', [EmployeeUiController::class, 'markPickedUp'])->name('employee.ui.orders.picked');
     Route::post('/ui/orders/{order}/payments', [EmployeeUiController::class, 'addPayment'])->name('employee.ui.orders.payments.store');
 
     Route::get('/ui/invoices', [EmployeeUiController::class, 'invoices'])->name('employee.ui.invoices');
+    Route::get('/ui/transactions', [EmployeeUiController::class, 'transactions'])->name('employee.ui.transactions');
+    Route::post('/ui/transactions/{transaction}/cancel', [EmployeeUiController::class, 'cancelTransaction'])->name('employee.ui.transactions.cancel');
     Route::get('/ui/invoices/{invoice}', [EmployeeUiController::class, 'showInvoice'])->name('employee.ui.invoices.show');
-    Route::post('/ui/invoices/{invoice}', [EmployeeUiController::class, 'updateInvoice'])->name('employee.ui.invoices.update');
     Route::post('/ui/invoices/{invoice}/delete', [EmployeeUiController::class, 'destroyInvoice'])->name('employee.ui.invoices.delete');
 });

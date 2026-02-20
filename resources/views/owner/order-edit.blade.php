@@ -37,6 +37,7 @@
       </div>
 
       <div class="small text-muted">Total estimé: <strong id="editTotal">{{ number_format($order->total,0,',',' ') }}</strong> FCFA</div>
+      <input class="form-control" type="number" min="0" step="0.01" name="discount_amount" value="{{ $order->discount_amount ?? 0 }}" placeholder="Réduction">
 
       <div class="form-check"><input class="form-check-input" type="checkbox" name="is_delivery" id="edit_is_delivery" value="1" @checked($order->is_delivery)><label class="form-check-label">Livraison</label></div>
       <div id="editDeliveryFields" class="vstack gap-2 {{ $order->is_delivery ? '' : 'd-none' }}">
