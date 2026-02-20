@@ -76,7 +76,15 @@
                         </ul>
                     </li>
 
-                    
+                    @if($ownerPressing?->module_accounting_enabled)
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle {{ request()->routeIs('owner.ui.accounting.*') ? 'active fw-semibold' : '' }}" href="#" role="button" data-bs-toggle="dropdown">Comptabilité</a>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="{{ route('owner.ui.accounting.settings') }}">Paramètres</a></li>
+                                <li><a class="dropdown-item" href="{{ route('owner.ui.accounting.reports') }}">Bilan</a></li>
+                            </ul>
+                        </li>
+                    @endif
                     <li class="nav-item"><a class="nav-link {{ request()->routeIs('owner.ui.pricing*') ? 'active fw-semibold' : '' }}" href="{{ route('owner.ui.pricing') }}">Abonnement</a></li>
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle {{ request()->routeIs('owner.ui.settings*','owner.ui.agencies*','owner.ui.employees*','owner.ui.services*') ? 'active fw-semibold' : '' }}" href="#" role="button" data-bs-toggle="dropdown">Paramètres</a>

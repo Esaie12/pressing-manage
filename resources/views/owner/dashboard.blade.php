@@ -40,9 +40,9 @@
         <div class="mt-2 d-flex gap-2 align-items-center">
           <form method="POST" action="{{ route('owner.ui.modules.cash-closure.toggle') }}">
             @csrf
-            <button class="btn btn-{{ $pressing?->module_cash_closure_enabled ? 'outline-danger' : 'primary' }}">{{ $pressing?->module_cash_closure_enabled ? 'Désactiver' : 'Activer' }}</button>
+            <button class="btn btn-{{ optional($pressing)->module_cash_closure_enabled ? 'outline-danger' : 'primary' }}">{{ optional($pressing)->module_cash_closure_enabled ? 'Désactiver' : 'Activer' }}</button>
           </form>
-          @if($pressing?->module_cash_closure_enabled)
+          @if(optional($pressing)->module_cash_closure_enabled)
             <a href="{{ route('owner.ui.cash-closures') }}" class="btn btn-outline-primary">Ouvrir la clôture</a>
           @endif
         </div>
@@ -67,9 +67,9 @@
         <div class="mt-2 d-flex gap-2 align-items-center">
           <form method="POST" action="{{ route('owner.ui.modules.accounting.toggle') }}">
             @csrf
-            <button class="btn btn-{{ $pressing?->module_accounting_enabled ? 'outline-danger' : 'primary' }}">{{ $pressing?->module_accounting_enabled ? 'Désactiver' : 'Activer' }}</button>
+            <button class="btn btn-{{ optional($pressing)->module_accounting_enabled ? 'outline-danger' : 'primary' }}">{{ optional($pressing)->module_accounting_enabled ? 'Désactiver' : 'Activer' }}</button>
           </form>
-          @if($pressing?->module_accounting_enabled)
+          @if(optional($pressing)->module_accounting_enabled)
             <a href="{{ route('owner.ui.accounting.settings') }}" class="btn btn-outline-primary">Paramètres</a>
             <a href="{{ route('owner.ui.accounting.reports') }}" class="btn btn-outline-secondary">Bilan</a>
           @endif
