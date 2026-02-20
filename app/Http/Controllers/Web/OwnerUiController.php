@@ -472,13 +472,7 @@ class OwnerUiController extends Controller
         return redirect()->route('owner.ui.cash-closures')->with('success', 'Clôture de caisse enregistrée.');
     }
 
-    public function showCashClosure(CashClosure $cashClosure)
-    {
-        abort_unless($cashClosure->pressing_id === Auth::user()->pressing_id, 403);
-        $cashClosure->load(['agency', 'employee', 'closedBy', 'entries.user']);
-
-        return view('owner.cash-closure-show', ['closure' => $cashClosure]);
-    }
+    
 
     public function agencies()
     {
