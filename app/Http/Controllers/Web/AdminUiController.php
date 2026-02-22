@@ -98,7 +98,8 @@ class AdminUiController extends Controller
 
         return view('admin.subscriptions', [
             'subscriptions' => $subscriptions,
-            'plans' => SubscriptionPlan::orderBy('monthly_price')->get(),
+            'plans' => SubscriptionPlan::where('is_custom', false)->orderBy('monthly_price')->get(),
+            'customPlans' => SubscriptionPlan::where('is_custom', true)->with('pressing')->latest()->limit(100)->get(),
             'pressings' => Pressing::orderBy('name')->get(),
             'total' => $subscriptions->count(),
             'active' => $subscriptions->where('is_active', true)->count(),
@@ -128,7 +129,8 @@ class AdminUiController extends Controller
     public function pricing()
     {
         return view('admin.pricing', [
-            'plans' => SubscriptionPlan::orderBy('monthly_price')->get(),
+            'plans' => SubscriptionPlan::where('is_custom', false)->orderBy('monthly_price')->get(),
+            'customPlans' => SubscriptionPlan::where('is_custom', true)->with('pressing')->latest()->limit(100)->get(),
             'customPricing' => CustomPackPricingSetting::query()->latest()->first() ?? new CustomPackPricingSetting(),
             'customRequests' => CustomPackRequest::with('pressing')->latest()->limit(100)->get(),
         ]);
@@ -163,6 +165,8 @@ class AdminUiController extends Controller
     public function storePlan(Request $request)
     {
         $data = $this->validatePlan($request);
+        $data['is_custom'] = false;
+        $data['pressing_id'] = null;
         SubscriptionPlan::create($data);
 
         return redirect()->route('admin.ui.pricing')->with('success', 'Pack créé.');

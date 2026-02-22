@@ -487,6 +487,7 @@ class OwnerUiController extends Controller
             'month' => ['required', 'date'],
             'agency_id' => ['nullable', 'exists:agencies,id'],
             'note' => ['nullable', 'string', 'max:2000'],
+            'billing_cycle' => ['required', 'in:monthly,annual'],
         ]);
 
         $agencyId = $data['agency_id'] ?? null;
@@ -1231,7 +1232,9 @@ class OwnerUiController extends Controller
             ->first();
 
         return view('owner.pricing', [
-            'plans' => SubscriptionPlan::orderBy('monthly_price')->get(),
+            'plans' => SubscriptionPlan::where(function ($q) use ($user) {
+                $q->where('is_custom', false)->orWhere('pressing_id', $user->pressing_id);
+            })->orderBy('monthly_price')->get(),
             'currentSubscription' => $currentSubscription,
             'customPricing' => CustomPackPricingSetting::query()->latest()->first() ?? new CustomPackPricingSetting(),
         ]);
@@ -1293,6 +1296,7 @@ class OwnerUiController extends Controller
             'want_cash_closure_module' => ['nullable', 'boolean'],
             'want_customization' => ['nullable', 'boolean'],
             'note' => ['nullable', 'string', 'max:2000'],
+            'billing_cycle' => ['required', 'in:monthly,annual'],
         ]);
 
         $pricing = CustomPackPricingSetting::query()->latest()->first();
@@ -1323,8 +1327,10 @@ class OwnerUiController extends Controller
             $estimated += (float) $pricing->price_customization;
         }
 
+        $pressingId = Auth::user()->pressing_id;
+
         CustomPackRequest::create([
-            'pressing_id' => Auth::user()->pressing_id,
+            'pressing_id' => $pressingId,
             'requested_agencies' => $agencies,
             'requested_employees' => $employees,
             'want_stock_module' => $wantStock,
@@ -1333,10 +1339,36 @@ class OwnerUiController extends Controller
             'want_customization' => $wantCustom,
             'estimated_price' => $estimated,
             'note' => $data['note'] ?? null,
-            'status' => 'pending',
+            'status' => 'approved',
         ]);
 
-        return redirect()->route('owner.ui.pricing')->with('success', 'Demande de pack personnalisé envoyée. Prix estimé: '.number_format($estimated, 0, ',', ' ').' FCFA.');
+        $customPlan = SubscriptionPlan::create([
+            'name' => 'Personnalisé - '.now()->format('d/m/Y H:i'),
+            'monthly_price' => $estimated,
+            'annual_price' => round($estimated * 12 * 0.9, 2),
+            'max_agencies' => $agencies,
+            'max_employees' => $employees,
+            'allow_customization' => $wantCustom,
+            'allow_cash_closure_module' => $wantCash,
+            'allow_accounting_module' => $wantAccounting,
+            'allow_stock_module' => $wantStock,
+            'is_custom' => true,
+            'pressing_id' => $pressingId,
+        ]);
+
+        $start = now()->startOfDay();
+        $end = $data['billing_cycle'] === 'monthly' ? now()->addMonth()->endOfDay() : now()->addYear()->endOfDay();
+        OwnerSubscription::where('pressing_id', $pressingId)->where('is_active', true)->update(['is_active' => false]);
+        OwnerSubscription::create([
+            'pressing_id' => $pressingId,
+            'subscription_plan_id' => $customPlan->id,
+            'billing_cycle' => $data['billing_cycle'],
+            'starts_at' => $start->toDateString(),
+            'ends_at' => $end->toDateString(),
+            'is_active' => true,
+        ]);
+
+        return redirect()->route('owner.ui.pricing')->with('success', 'Pack personnalisé activé. Prix: '.number_format($estimated, 0, ',', ' ').' FCFA.');
     }
 
     public function stats(Request $request)
