@@ -71,26 +71,22 @@
         @if($section==='orders')
             <div class="card mb-3"><div class="card-header">Créer une commande abonnement</div><div class="card-body">
                 <form method="POST" action="{{ route('owner.ui.subscriptions-module.orders.store') }}" class="row g-2">@csrf
-                    <div class="col-md-6"><select class="form-select" name="subscription_contract_id" required><option value="">Contrat</option>@foreach($contracts as $ct)<option value="{{ $ct->id }}">{{ $ct->client?->name }} - {{ $ct->title }}</option>@endforeach</select></div>
-                    <div class="col-md-6"><select class="form-select" name="agency_id"><option value="">Agence (optionnel)</option>@foreach($agencies as $a)<option value="{{ $a->id }}">{{ $a->name }}</option>@endforeach</select></div>
-                    <div class="col-md-4"><input class="form-control" type="date" name="order_date" required></div>
-                    <div class="col-md-4"><input class="form-control" type="date" name="pickup_date"></div>
-                    <div class="col-md-4"><input class="form-control" type="number" min="1" name="items_count" value="1" required></div>
-                    <div class="col-12"><input class="form-control" name="notes" placeholder="Notes"></div>
+                    <div class="col-md-6"><label class="form-label">Contrat</label><select class="form-select" name="subscription_contract_id" required><option value="">Contrat</option>@foreach($contracts as $ct)<option value="{{ $ct->id }}">{{ $ct->client?->name }} - {{ $ct->title }}</option>@endforeach</select></div>
+                    <div class="col-md-6"><label class="form-label">Agence</label><select class="form-select" name="agency_id" required><option value="">Agence</option>@foreach($agencies as $a)<option value="{{ $a->id }}">{{ $a->name }}</option>@endforeach</select></div>
+                    <div class="col-md-6"><label class="form-label">Date commande</label><input class="form-control" type="date" name="order_date" required></div>
+                    <div class="col-md-6"><label class="form-label">Notes</label><input class="form-control" name="notes" placeholder="Notes"></div>
                     <div class="col-12"><button class="btn btn-primary">Créer commande</button></div>
                 </form>
             </div></div>
 
-            <div class="card"><div class="card-header">Liste commandes abonnements</div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Réf</th><th>Client</th><th>Date</th><th>Pièces</th><th>Statut</th></tr></thead><tbody>
+            <div class="card"><div class="card-header">Liste commandes abonnements</div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Réf</th><th>Client</th><th>Agence</th><th>Date</th><th>Statut</th><th>Action</th></tr></thead><tbody>
                 @forelse($orders as $order)
                 <tr>
-                    <td>{{ $order->reference }}</td><td>{{ $order->contract?->client?->name }}</td><td>{{ $order->order_date?->format('d/m/Y') }}</td><td>{{ $order->items_count }}</td>
-                    <td><form method="POST" action="{{ route('owner.ui.subscriptions-module.orders.status', $order) }}" class="d-flex gap-2">@csrf
-                        <select class="form-select form-select-sm" name="status">@foreach($statuses as $key=>$label)<option value="{{ $key }}" @selected($order->status===$key)>{{ $label }}</option>@endforeach</select>
-                        <button class="btn btn-sm btn-outline-primary">OK</button>
-                    </form></td>
+                    <td>{{ $order->reference }}</td><td>{{ $order->contract?->client?->name }}</td><td>{{ $order->agency?->name ?? '-' }}</td><td>{{ $order->order_date?->format('d/m/Y') }}</td>
+                    <td><span class="badge text-bg-{{ $order->status === 'pending' ? 'warning' : ($order->status === 'ready' ? 'primary' : 'success') }}{{ $order->status === 'pending' ? ' text-dark' : '' }}">{{ $statuses[$order->status] ?? $order->status }}</span></td>
+                    <td>@if($order->status === 'pending')<form method="POST" action="{{ route('owner.ui.subscriptions-module.orders.ready', $order) }}">@csrf<button class="btn btn-sm btn-outline-primary">Prête</button></form>@elseif($order->status === 'ready')<form method="POST" action="{{ route('owner.ui.subscriptions-module.orders.delivered', $order) }}">@csrf<button class="btn btn-sm btn-outline-success">Livrée</button></form>@else<span class="text-muted small">Terminée</span>@endif</td>
                 </tr>
-                @empty <tr><td colspan="5" class="text-center text-muted">Aucune commande abonnement</td></tr> @endforelse
+                @empty <tr><td colspan="6" class="text-center text-muted">Aucune commande abonnement</td></tr> @endforelse
             </tbody></table></div></div>
         @endif
     </div>

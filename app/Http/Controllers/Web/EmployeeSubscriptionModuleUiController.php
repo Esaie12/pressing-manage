@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Models\Agency;
 use App\Models\Pressing;
 use App\Models\SubscriptionContract;
 use App\Models\SubscriptionOrder;
@@ -23,8 +24,9 @@ class EmployeeSubscriptionModuleUiController extends Controller
                 ->with('client')
                 ->orderByDesc('id')
                 ->get(),
+            'agencies' => Agency::where('pressing_id', $employee->pressing_id)->orderBy('name')->get(),
             'orders' => SubscriptionOrder::where('pressing_id', $employee->pressing_id)
-                ->with('contract.client', 'employee')
+                ->with('contract.client', 'employee', 'agency')
                 ->orderByDesc('id')
                 ->get(),
             'statuses' => ['pending' => 'En préparation', 'ready' => 'Prête', 'delivered' => 'Livrée'],
@@ -39,16 +41,16 @@ class EmployeeSubscriptionModuleUiController extends Controller
 
         $data = $request->validate([
             'subscription_contract_id' => ['required', 'exists:subscription_contracts,id'],
+            'agency_id' => ['required', 'exists:agencies,id'],
             'order_date' => ['required', 'date'],
-            'pickup_date' => ['nullable', 'date', 'after_or_equal:order_date'],
-            'items_count' => ['required', 'integer', 'min:1'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
         SubscriptionOrder::create($data + [
             'pressing_id' => $employee->pressing_id,
-            'agency_id' => $employee->agency_id,
             'employee_id' => $employee->id,
+            'pickup_date' => null,
+            'items_count' => 1,
             'status' => 'pending',
             'reference' => 'ABO-EMP-'.now()->format('ymdHis').'-'.random_int(100, 999),
         ]);
@@ -56,15 +58,33 @@ class EmployeeSubscriptionModuleUiController extends Controller
         return redirect()->route('employee.ui.subscription-orders')->with('success', 'Commande abonnement enregistrée.');
     }
 
-    public function updateStatus(Request $request, SubscriptionOrder $order)
+    public function markReady(SubscriptionOrder $order)
     {
         $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
         abort_if(! $pressing->module_subscription_enabled, 403, 'Module Abonnements non activé.');
         abort_unless($order->pressing_id === Auth::user()->pressing_id, 403);
 
-        $data = $request->validate(['status' => ['required', 'in:pending,ready,delivered']]);
-        $order->update(['status' => $data['status']]);
+        if ($order->status !== 'pending') {
+            return redirect()->route('employee.ui.subscription-orders')->with('error', 'Seules les commandes en préparation peuvent passer à prête.');
+        }
 
-        return redirect()->route('employee.ui.subscription-orders')->with('success', 'Statut mis à jour.');
+        $order->update(['status' => 'ready']);
+
+        return redirect()->route('employee.ui.subscription-orders')->with('success', 'Commande marquée prête.');
+    }
+
+    public function markDelivered(SubscriptionOrder $order)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if(! $pressing->module_subscription_enabled, 403, 'Module Abonnements non activé.');
+        abort_unless($order->pressing_id === Auth::user()->pressing_id, 403);
+
+        if ($order->status !== 'ready') {
+            return redirect()->route('employee.ui.subscription-orders')->with('error', 'Seules les commandes prêtes peuvent être livrées.');
+        }
+
+        $order->update(['status' => 'delivered']);
+
+        return redirect()->route('employee.ui.subscription-orders')->with('success', 'Commande marquée livrée.');
     }
 }

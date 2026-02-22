@@ -32,6 +32,11 @@ class SubscriptionOrder extends Model
         return $this->belongsTo(SubscriptionContract::class, 'subscription_contract_id');
     }
 
+    public function agency()
+    {
+        return $this->belongsTo(Agency::class, 'agency_id');
+    }
+
     public function employee()
     {
         return $this->belongsTo(User::class, 'employee_id');
