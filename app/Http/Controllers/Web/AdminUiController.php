@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\Agency;
+use App\Models\CustomPackPricingSetting;
+use App\Models\CustomPackRequest;
 use App\Models\Expense;
 use App\Models\Order;
 use App\Models\OwnerSubscription;
@@ -96,7 +98,8 @@ class AdminUiController extends Controller
 
         return view('admin.subscriptions', [
             'subscriptions' => $subscriptions,
-            'plans' => SubscriptionPlan::orderBy('monthly_price')->get(),
+            'plans' => SubscriptionPlan::where('is_custom', false)->orderBy('monthly_price')->get(),
+            'customPlans' => SubscriptionPlan::where('is_custom', true)->with('pressing')->latest()->limit(100)->get(),
             'pressings' => Pressing::orderBy('name')->get(),
             'total' => $subscriptions->count(),
             'active' => $subscriptions->where('is_active', true)->count(),
@@ -126,13 +129,44 @@ class AdminUiController extends Controller
     public function pricing()
     {
         return view('admin.pricing', [
-            'plans' => SubscriptionPlan::orderBy('monthly_price')->get(),
+            'plans' => SubscriptionPlan::where('is_custom', false)->orderBy('monthly_price')->get(),
+            'customPlans' => SubscriptionPlan::where('is_custom', true)->with('pressing')->latest()->limit(100)->get(),
+            'customPricing' => CustomPackPricingSetting::query()->latest()->first() ?? new CustomPackPricingSetting(),
+            'customRequests' => CustomPackRequest::with('pressing')->latest()->limit(100)->get(),
         ]);
+    }
+
+    public function saveCustomPackPricing(Request $request)
+    {
+        $data = $request->validate([
+            'base_price' => ['required', 'numeric', 'min:0'],
+            'price_module_stock' => ['required', 'numeric', 'min:0'],
+            'price_module_accounting' => ['required', 'numeric', 'min:0'],
+            'price_module_cash_closure' => ['required', 'numeric', 'min:0'],
+            'price_customization' => ['required', 'numeric', 'min:0'],
+            'price_agencies_1_4' => ['required', 'numeric', 'min:0'],
+            'price_agencies_5_10' => ['required', 'numeric', 'min:0'],
+            'price_agencies_11_plus' => ['required', 'numeric', 'min:0'],
+            'price_employees_1_5' => ['required', 'numeric', 'min:0'],
+            'price_employees_6_20' => ['required', 'numeric', 'min:0'],
+            'price_employees_21_plus' => ['required', 'numeric', 'min:0'],
+        ]);
+
+        $row = CustomPackPricingSetting::query()->latest()->first();
+        if ($row) {
+            $row->update($data);
+        } else {
+            CustomPackPricingSetting::create($data);
+        }
+
+        return redirect()->route('admin.ui.pricing')->with('success', 'Tarification pack personnalisé enregistrée.');
     }
 
     public function storePlan(Request $request)
     {
         $data = $this->validatePlan($request);
+        $data['is_custom'] = false;
+        $data['pressing_id'] = null;
         SubscriptionPlan::create($data);
 
         return redirect()->route('admin.ui.pricing')->with('success', 'Pack créé.');
@@ -148,12 +182,23 @@ class AdminUiController extends Controller
 
     private function validatePlan(Request $request): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'name' => ['required', 'string', 'max:100'],
             'monthly_price' => ['required', 'numeric', 'min:0'],
             'annual_price' => ['required', 'numeric', 'min:0'],
             'max_agencies' => ['required', 'integer', 'min:1'],
             'max_employees' => ['required', 'integer', 'min:1'],
+            'allow_customization' => ['nullable', 'boolean'],
+            'allow_cash_closure_module' => ['nullable', 'boolean'],
+            'allow_accounting_module' => ['nullable', 'boolean'],
+            'allow_stock_module' => ['nullable', 'boolean'],
         ]);
+
+        $data['allow_customization'] = (bool) ($data['allow_customization'] ?? false);
+        $data['allow_cash_closure_module'] = (bool) ($data['allow_cash_closure_module'] ?? false);
+        $data['allow_accounting_module'] = (bool) ($data['allow_accounting_module'] ?? false);
+        $data['allow_stock_module'] = (bool) ($data['allow_stock_module'] ?? false);
+
+        return $data;
     }
 }

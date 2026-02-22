@@ -11,6 +11,8 @@ use App\Models\CategoryExpense;
 use App\Models\CashClosure;
 use App\Models\CashClosureEntry;
 use App\Models\Client;
+use App\Models\CustomPackPricingSetting;
+use App\Models\CustomPackRequest;
 use App\Models\EmployeeRequest;
 use App\Models\Expense;
 use App\Models\Invoice;
@@ -74,6 +76,11 @@ class OwnerUiController extends Controller
     public function toggleCashClosureModule()
     {
         $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+
+        if (! $this->planAllows($pressing->id, 'allow_cash_closure_module')) {
+            return redirect()->route('owner.ui.dashboard')->with('error', 'Votre pack ne permet pas le module Clôture de caisse.');
+        }
+
         $pressing->update(['module_cash_closure_enabled' => ! $pressing->module_cash_closure_enabled]);
 
         return redirect()->route('owner.ui.dashboard')->with('success', $pressing->module_cash_closure_enabled
@@ -84,6 +91,11 @@ class OwnerUiController extends Controller
     public function toggleAccountingModule()
     {
         $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+
+        if (! $this->planAllows($pressing->id, 'allow_accounting_module')) {
+            return redirect()->route('owner.ui.dashboard')->with('error', 'Votre pack ne permet pas le module Comptabilité.');
+        }
+
         $pressing->update(['module_accounting_enabled' => ! $pressing->module_accounting_enabled]);
 
         return redirect()->route('owner.ui.dashboard')->with('success', $pressing->module_accounting_enabled
@@ -95,6 +107,10 @@ class OwnerUiController extends Controller
     public function toggleStockModule(Request $request)
     {
         $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+
+        if (! $this->planAllows($pressing->id, 'allow_stock_module')) {
+            return redirect()->route('owner.ui.dashboard')->with('error', 'Votre pack ne permet pas le module Stock.');
+        }
 
         if (! $pressing->module_stock_enabled && ! $pressing->stock_mode) {
             $data = $request->validate([
@@ -120,15 +136,26 @@ class OwnerUiController extends Controller
         $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
         abort_if(! $pressing->module_stock_enabled, 403, 'Module Stock non activé.');
 
-        $agencyId = $request->query('agency_id');
         $date = $request->query('movement_date', now()->toDateString());
+        $section = $request->query('section', 'articles');
+        $scope = $request->query('scope', 'all');
+
+        $agencies = Agency::where('pressing_id', $pressing->id)->orderBy('name')->get();
+        $items = StockItem::where('pressing_id', $pressing->id)->orderBy('name')->get();
 
         $movements = StockMovement::where('pressing_id', $pressing->id)
             ->with(['item', 'user', 'agency', 'sourceAgency', 'targetAgency'])
-            ->when($agencyId, fn ($q) => $q->where(function ($qq) use ($agencyId) {
-                $qq->where('agency_id', $agencyId)
-                    ->orWhere('source_agency_id', $agencyId)
-                    ->orWhere('target_agency_id', $agencyId);
+            ->when($scope === 'central', function ($q) {
+                $q->where(function ($qq) {
+                    $qq->whereNull('agency_id')
+                        ->orWhereNull('source_agency_id')
+                        ->orWhereNull('target_agency_id');
+                });
+            })
+            ->when($scope !== 'all' && $scope !== 'central', fn ($q) => $q->where(function ($qq) use ($scope) {
+                $qq->where('agency_id', $scope)
+                    ->orWhere('source_agency_id', $scope)
+                    ->orWhere('target_agency_id', $scope);
             }))
             ->latest('movement_date')
             ->latest()
@@ -137,17 +164,34 @@ class OwnerUiController extends Controller
 
         $balances = StockBalance::where('pressing_id', $pressing->id)
             ->with(['item', 'agency'])
+            ->when($scope === 'central', fn ($q) => $q->whereNull('agency_id'))
+            ->when($scope !== 'all' && $scope !== 'central', fn ($q) => $q->where('agency_id', $scope))
             ->orderByDesc('agency_id')
             ->get();
 
+        $statsScopeBalances = StockBalance::where('pressing_id', $pressing->id)
+            ->when($scope === 'central', fn ($q) => $q->whereNull('agency_id'))
+            ->when($scope !== 'all' && $scope !== 'central', fn ($q) => $q->where('agency_id', $scope))
+            ->get();
+
+        $totalArticles = $items->count();
+        $inStockArticles = $statsScopeBalances->where('quantity', '>', 0)->pluck('stock_item_id')->unique()->count();
+        $outOfStockArticles = max($totalArticles - $inStockArticles, 0);
+
         return view('owner.stocks', [
             'pressing' => $pressing,
-            'agencies' => Agency::where('pressing_id', $pressing->id)->orderBy('name')->get(),
-            'items' => StockItem::where('pressing_id', $pressing->id)->where('is_active', true)->orderBy('name')->get(),
+            'agencies' => $agencies,
+            'items' => $items,
+            'activeItems' => $items->where('is_active', true)->values(),
             'movements' => $movements,
             'balances' => $balances,
-            'selectedAgencyId' => $agencyId,
             'selectedDate' => $date,
+            'section' => in_array($section, ['articles', 'mouvements', 'stock'], true) ? $section : 'articles',
+            'scope' => $scope,
+            'canEditWindowMinutes' => 180,
+            'totalArticles' => $totalArticles,
+            'inStockArticles' => $inStockArticles,
+            'outOfStockArticles' => $outOfStockArticles,
         ]);
     }
 
@@ -159,18 +203,64 @@ class OwnerUiController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'sku' => ['nullable', 'string', 'max:80'],
-            'unit' => ['nullable', 'string', 'max:20'],
+            'unit' => ['required', 'in:unité,kg,litre,ml,paquet,carton,mètre'],
+            'alert_quantity' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         StockItem::create([
             'pressing_id' => $pressing->id,
             'name' => $data['name'],
             'sku' => $data['sku'] ?? null,
-            'unit' => $data['unit'] ?? 'unité',
+            'unit' => $data['unit'],
+            'alert_quantity_central' => $pressing->stock_mode === 'central' ? (float) ($data['alert_quantity'] ?? 0) : null,
+            'alert_quantity_agency' => $pressing->stock_mode === 'agency' ? (float) ($data['alert_quantity'] ?? 0) : null,
             'is_active' => true,
         ]);
 
-        return redirect()->route('owner.ui.stocks')->with('success', 'Article de stock ajouté.');
+        return redirect()->route('owner.ui.stocks', ['section' => 'articles'])->with('success', 'Article de stock ajouté.');
+    }
+
+    public function updateStockItem(Request $request, StockItem $stockItem)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if($stockItem->pressing_id !== $pressing->id, 403);
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'sku' => ['nullable', 'string', 'max:80'],
+            'unit' => ['required', 'in:unité,kg,litre,ml,paquet,carton,mètre'],
+            'alert_quantity' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        $stockItem->update([
+            'name' => $data['name'],
+            'sku' => $data['sku'] ?? null,
+            'unit' => $data['unit'],
+            'alert_quantity_central' => $pressing->stock_mode === 'central' ? (float) ($data['alert_quantity'] ?? 0) : $stockItem->alert_quantity_central,
+            'alert_quantity_agency' => $pressing->stock_mode === 'agency' ? (float) ($data['alert_quantity'] ?? 0) : $stockItem->alert_quantity_agency,
+        ]);
+
+        return redirect()->route('owner.ui.stocks', ['section' => 'articles'])->with('success', 'Article de stock modifié.');
+    }
+
+    public function destroyStockItem(StockItem $stockItem)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if($stockItem->pressing_id !== $pressing->id, 403);
+
+        $hasMovements = StockMovement::where('pressing_id', $pressing->id)
+            ->where('stock_item_id', $stockItem->id)
+            ->exists();
+
+        if ($hasMovements) {
+            $stockItem->update(['is_active' => false]);
+
+            return redirect()->route('owner.ui.stocks', ['section' => 'articles'])->with('success', 'Article désactivé (historique conservé).');
+        }
+
+        $stockItem->delete();
+
+        return redirect()->route('owner.ui.stocks', ['section' => 'articles'])->with('success', 'Article supprimé.');
     }
 
     public function storeStockMovement(Request $request)
@@ -181,49 +271,22 @@ class OwnerUiController extends Controller
 
         $data = $request->validate([
             'stock_item_id' => ['required', 'exists:stock_items,id'],
-            'movement_type' => ['required', 'in:entree,sortie,transfert,ajustement,perte_casse'],
+            'movement_type' => ['required', 'in:entree,sortie,transfert,perte_casse'],
             'quantity' => ['required', 'numeric', 'gt:0'],
             'movement_date' => ['required', 'date'],
-            'agency_id' => ['nullable', 'exists:agencies,id'],
             'source_agency_id' => ['nullable', 'exists:agencies,id'],
             'target_agency_id' => ['nullable', 'exists:agencies,id'],
-            'adjustment_sign' => ['nullable', 'in:plus,minus'],
             'note' => ['nullable', 'string', 'max:500'],
         ]);
 
         $item = StockItem::where('id', $data['stock_item_id'])->where('pressing_id', $pressing->id)->firstOrFail();
-        $qty = (float) $data['quantity'];
 
-        $resolveAgency = function ($agencyId) use ($pressing) {
-            if (! $agencyId) {
-                return null;
-            }
-
-            return Agency::where('id', $agencyId)->where('pressing_id', $pressing->id)->firstOrFail()->id;
-        };
-
-        $agencyId = $resolveAgency($data['agency_id'] ?? null);
-        $sourceAgencyId = $resolveAgency($data['source_agency_id'] ?? null);
-        $targetAgencyId = $resolveAgency($data['target_agency_id'] ?? null);
-
-        if ($pressing->stock_mode === 'agency' && $data['movement_type'] === 'transfert') {
-            return redirect()->route('owner.ui.stocks')->with('error', 'Le mode Stock par agence ne permet pas les transferts centralisés.');
+        [$agencyId, $sourceAgencyId, $targetAgencyId, $error] = $this->normalizeStockMovementPayload($pressing, $data);
+        if ($error) {
+            return redirect()->route('owner.ui.stocks', ['section' => 'mouvements'])->with('error', $error);
         }
 
-        if ($pressing->stock_mode === 'agency' && ! $agencyId && $data['movement_type'] !== 'transfert') {
-            return redirect()->route('owner.ui.stocks')->with('error', 'En mode Stock par agence, vous devez choisir une agence.');
-        }
-
-        if ($pressing->stock_mode === 'central' && $data['movement_type'] === 'transfert') {
-            if ($sourceAgencyId && $targetAgencyId) {
-                return redirect()->route('owner.ui.stocks')->with('error', 'Transfert agence → agence interdit. Utilisez magasin central ↔ agence.');
-            }
-            if (! $sourceAgencyId && ! $targetAgencyId) {
-                return redirect()->route('owner.ui.stocks')->with('error', 'Choisissez une source ou une destination agence pour le transfert.');
-            }
-        }
-
-        DB::transaction(function () use ($pressing, $owner, $item, $data, $qty, $agencyId, $sourceAgencyId, $targetAgencyId) {
+        DB::transaction(function () use ($pressing, $owner, $item, $data, $agencyId, $sourceAgencyId, $targetAgencyId) {
             $movement = StockMovement::create([
                 'pressing_id' => $pressing->id,
                 'stock_item_id' => $item->id,
@@ -232,28 +295,93 @@ class OwnerUiController extends Controller
                 'source_agency_id' => $sourceAgencyId,
                 'target_agency_id' => $targetAgencyId,
                 'movement_type' => $data['movement_type'],
-                'quantity' => $qty,
+                'quantity' => (float) $data['quantity'],
                 'note' => $data['note'] ?? null,
                 'movement_date' => $data['movement_date'],
             ]);
 
-            if ($data['movement_type'] === 'entree') {
-                $this->adjustStockBalance($pressing->id, $item->id, $agencyId, $qty);
-            } elseif ($data['movement_type'] === 'sortie' || $data['movement_type'] === 'perte_casse') {
-                $this->adjustStockBalance($pressing->id, $item->id, $agencyId, -$qty);
-            } elseif ($data['movement_type'] === 'ajustement') {
-                $sign = $data['adjustment_sign'] ?? 'plus';
-                $delta = $sign === 'minus' ? -$qty : $qty;
-                $movement->note = trim(($movement->note ? $movement->note.' | ' : '').'Ajustement '.($sign === 'minus' ? '-' : '+'));
-                $movement->save();
-                $this->adjustStockBalance($pressing->id, $item->id, $agencyId, $delta);
-            } elseif ($data['movement_type'] === 'transfert') {
-                $this->adjustStockBalance($pressing->id, $item->id, $sourceAgencyId, -$qty);
-                $this->adjustStockBalance($pressing->id, $item->id, $targetAgencyId, $qty);
-            }
+            $this->applyStockMovement($movement);
         });
 
-        return redirect()->route('owner.ui.stocks')->with('success', 'Mouvement de stock enregistré.');
+        return redirect()->route('owner.ui.stocks', ['section' => 'mouvements'])->with('success', 'Mouvement de stock enregistré.');
+    }
+
+    public function editStockMovement(StockMovement $stockMovement)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if($stockMovement->pressing_id !== $pressing->id, 403);
+
+        if (! $this->canEditStockMovement($stockMovement)) {
+            return redirect()->route('owner.ui.stocks', ['section' => 'mouvements'])->with('error', 'Modification autorisée uniquement dans les 3h suivant la création.');
+        }
+
+        return view('owner.stock-movement-edit', [
+            'movement' => $stockMovement->load(['item', 'sourceAgency', 'targetAgency']),
+            'agencies' => Agency::where('pressing_id', $pressing->id)->orderBy('name')->get(),
+            'items' => StockItem::where('pressing_id', $pressing->id)->where('is_active', true)->orderBy('name')->get(),
+        ]);
+    }
+
+    public function updateStockMovement(Request $request, StockMovement $stockMovement)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if($stockMovement->pressing_id !== $pressing->id, 403);
+
+        if (! $this->canEditStockMovement($stockMovement)) {
+            return redirect()->route('owner.ui.stocks', ['section' => 'mouvements'])->with('error', 'Modification autorisée uniquement dans les 3h suivant la création.');
+        }
+
+        $data = $request->validate([
+            'stock_item_id' => ['required', 'exists:stock_items,id'],
+            'movement_type' => ['required', 'in:entree,sortie,transfert,perte_casse'],
+            'quantity' => ['required', 'numeric', 'gt:0'],
+            'movement_date' => ['required', 'date'],
+            'source_agency_id' => ['nullable', 'exists:agencies,id'],
+            'target_agency_id' => ['nullable', 'exists:agencies,id'],
+            'note' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $item = StockItem::where('id', $data['stock_item_id'])->where('pressing_id', $pressing->id)->firstOrFail();
+        [$agencyId, $sourceAgencyId, $targetAgencyId, $error] = $this->normalizeStockMovementPayload($pressing, $data);
+        if ($error) {
+            return redirect()->route('owner.ui.stocks', ['section' => 'mouvements'])->with('error', $error);
+        }
+
+        DB::transaction(function () use ($stockMovement, $item, $data, $agencyId, $sourceAgencyId, $targetAgencyId) {
+            $this->revertStockMovement($stockMovement);
+
+            $stockMovement->update([
+                'stock_item_id' => $item->id,
+                'agency_id' => $agencyId,
+                'source_agency_id' => $sourceAgencyId,
+                'target_agency_id' => $targetAgencyId,
+                'movement_type' => $data['movement_type'],
+                'quantity' => (float) $data['quantity'],
+                'note' => $data['note'] ?? null,
+                'movement_date' => $data['movement_date'],
+            ]);
+
+            $this->applyStockMovement($stockMovement);
+        });
+
+        return redirect()->route('owner.ui.stocks', ['section' => 'mouvements'])->with('success', 'Mouvement modifié.');
+    }
+
+    public function destroyStockMovement(StockMovement $stockMovement)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if($stockMovement->pressing_id !== $pressing->id, 403);
+
+        if (! $this->canEditStockMovement($stockMovement)) {
+            return redirect()->route('owner.ui.stocks', ['section' => 'mouvements'])->with('error', 'Suppression autorisée uniquement dans les 3h suivant la création.');
+        }
+
+        DB::transaction(function () use ($stockMovement) {
+            $this->revertStockMovement($stockMovement);
+            $stockMovement->delete();
+        });
+
+        return redirect()->route('owner.ui.stocks', ['section' => 'mouvements'])->with('success', 'Mouvement supprimé.');
     }
 
     public function accountingSettings(Request $request)
@@ -359,6 +487,7 @@ class OwnerUiController extends Controller
             'month' => ['required', 'date'],
             'agency_id' => ['nullable', 'exists:agencies,id'],
             'note' => ['nullable', 'string', 'max:2000'],
+            'billing_cycle' => ['required', 'in:monthly,annual'],
         ]);
 
         $agencyId = $data['agency_id'] ?? null;
@@ -604,7 +733,16 @@ class OwnerUiController extends Controller
             'address' => ['nullable', 'string', 'max:255'],
         ]);
 
-        Agency::create($data + ['pressing_id' => Auth::user()->pressing_id, 'is_active' => true]);
+        $pressingId = Auth::user()->pressing_id;
+        $plan = $this->activePlan($pressingId);
+        if ($plan) {
+            $agenciesCount = Agency::where('pressing_id', $pressingId)->count();
+            if ($agenciesCount >= (int) $plan->max_agencies) {
+                return redirect()->route('owner.ui.agencies')->with('error', "Limite d'agences atteinte pour votre pack actuel.");
+            }
+        }
+
+        Agency::create($data + ['pressing_id' => $pressingId, 'is_active' => true]);
 
         return redirect()->route('owner.ui.agencies')->with('success', 'Agence créée.');
     }
@@ -641,8 +779,17 @@ class OwnerUiController extends Controller
             'address' => ['nullable', 'string', 'max:255'],
         ]);
 
+        $pressingId = Auth::user()->pressing_id;
+        $plan = $this->activePlan($pressingId);
+        if ($plan) {
+            $employeesCount = User::where('pressing_id', $pressingId)->where('role', User::ROLE_EMPLOYEE)->count();
+            if ($employeesCount >= (int) $plan->max_employees) {
+                return redirect()->route('owner.ui.employees')->with('error', "Limite d'employés atteinte pour votre pack actuel.");
+            }
+        }
+
         $agency = Agency::where('id', $data['agency_id'])
-            ->where('pressing_id', Auth::user()->pressing_id)
+            ->where('pressing_id', $pressingId)
             ->where('is_active', true)
             ->firstOrFail();
 
@@ -652,7 +799,7 @@ class OwnerUiController extends Controller
             'password' => Hash::make($data['password']),
             'role' => User::ROLE_EMPLOYEE,
             'is_active' => true,
-            'pressing_id' => Auth::user()->pressing_id,
+            'pressing_id' => $pressingId,
             'agency_id' => $agency->id,
             'gender' => $data['gender'] ?? null,
             'phone' => $data['phone'] ?? null,
@@ -1051,6 +1198,13 @@ class OwnerUiController extends Controller
 
         $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
 
+        if (! $this->planAllows($pressing->id, 'allow_customization')) {
+            unset($data['invoice_template'], $data['invoice_primary_color'], $data['invoice_welcome_message']);
+            if ($request->hasFile('invoice_logo')) {
+                return redirect()->route('owner.ui.settings')->with('error', 'Votre pack ne permet pas la personnalisation.');
+            }
+        }
+
         if ($request->hasFile('invoice_logo')) {
             $data['invoice_logo_path'] = $request->file('invoice_logo')->store('logos', 'public');
         }
@@ -1078,8 +1232,11 @@ class OwnerUiController extends Controller
             ->first();
 
         return view('owner.pricing', [
-            'plans' => SubscriptionPlan::orderBy('monthly_price')->get(),
+            'plans' => SubscriptionPlan::where(function ($q) use ($user) {
+                $q->where('is_custom', false)->orWhere('pressing_id', $user->pressing_id);
+            })->orderBy('monthly_price')->get(),
             'currentSubscription' => $currentSubscription,
+            'customPricing' => CustomPackPricingSetting::query()->latest()->first() ?? new CustomPackPricingSetting(),
         ]);
     }
 
@@ -1093,6 +1250,28 @@ class OwnerUiController extends Controller
         $start = now()->startOfDay();
         $end = $data['billing_cycle'] === 'monthly' ? now()->addMonth()->endOfDay() : now()->addYear()->endOfDay();
 
+        $plan = SubscriptionPlan::findOrFail($data['subscription_plan_id']);
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+
+        $agenciesCount = Agency::where('pressing_id', $pressing->id)->count();
+        $employeesCount = User::where('pressing_id', $pressing->id)->where('role', User::ROLE_EMPLOYEE)->count();
+        if ($agenciesCount > (int) $plan->max_agencies) {
+            return redirect()->route('owner.ui.pricing')->with('error', "Ce pack ne couvre pas votre nombre actuel d'agences.");
+        }
+        if ($employeesCount > (int) $plan->max_employees) {
+            return redirect()->route('owner.ui.pricing')->with('error', "Ce pack ne couvre pas votre nombre actuel d'employés.");
+        }
+
+        if ($pressing->module_cash_closure_enabled && ! $plan->allow_cash_closure_module) {
+            return redirect()->route('owner.ui.pricing')->with('error', 'Désactivez le module Clôture de caisse avant de prendre ce pack.');
+        }
+        if ($pressing->module_accounting_enabled && ! $plan->allow_accounting_module) {
+            return redirect()->route('owner.ui.pricing')->with('error', 'Désactivez le module Comptabilité avant de prendre ce pack.');
+        }
+        if ($pressing->module_stock_enabled && ! $plan->allow_stock_module) {
+            return redirect()->route('owner.ui.pricing')->with('error', 'Désactivez le module Stock avant de prendre ce pack.');
+        }
+
         OwnerSubscription::where('pressing_id', Auth::user()->pressing_id)->where('is_active', true)->update(['is_active' => false]);
 
         OwnerSubscription::create([
@@ -1105,6 +1284,91 @@ class OwnerUiController extends Controller
         ]);
 
         return redirect()->route('owner.ui.pricing')->with('success', 'Souscription effectuée avec succès.');
+    }
+
+    public function storeCustomPackRequest(Request $request)
+    {
+        $data = $request->validate([
+            'requested_agencies' => ['required', 'integer', 'min:1'],
+            'requested_employees' => ['required', 'integer', 'min:1'],
+            'want_stock_module' => ['nullable', 'boolean'],
+            'want_accounting_module' => ['nullable', 'boolean'],
+            'want_cash_closure_module' => ['nullable', 'boolean'],
+            'want_customization' => ['nullable', 'boolean'],
+            'note' => ['nullable', 'string', 'max:2000'],
+            'billing_cycle' => ['required', 'in:monthly,annual'],
+        ]);
+
+        $pricing = CustomPackPricingSetting::query()->latest()->first();
+        abort_unless($pricing, 422, "La tarification des packs personnalisés n'est pas encore configurée.");
+
+        $estimated = (float) $pricing->base_price;
+        $agencies = (int) $data['requested_agencies'];
+        $employees = (int) $data['requested_employees'];
+
+        $estimated += $agencies <= 4 ? (float) $pricing->price_agencies_1_4 : ($agencies <= 10 ? (float) $pricing->price_agencies_5_10 : (float) $pricing->price_agencies_11_plus);
+        $estimated += $employees <= 5 ? (float) $pricing->price_employees_1_5 : ($employees <= 20 ? (float) $pricing->price_employees_6_20 : (float) $pricing->price_employees_21_plus);
+
+        $wantStock = (bool) ($data['want_stock_module'] ?? false);
+        $wantAccounting = (bool) ($data['want_accounting_module'] ?? false);
+        $wantCash = (bool) ($data['want_cash_closure_module'] ?? false);
+        $wantCustom = (bool) ($data['want_customization'] ?? false);
+
+        if ($wantStock) {
+            $estimated += (float) $pricing->price_module_stock;
+        }
+        if ($wantAccounting) {
+            $estimated += (float) $pricing->price_module_accounting;
+        }
+        if ($wantCash) {
+            $estimated += (float) $pricing->price_module_cash_closure;
+        }
+        if ($wantCustom) {
+            $estimated += (float) $pricing->price_customization;
+        }
+
+        $pressingId = Auth::user()->pressing_id;
+
+        CustomPackRequest::create([
+            'pressing_id' => $pressingId,
+            'requested_agencies' => $agencies,
+            'requested_employees' => $employees,
+            'want_stock_module' => $wantStock,
+            'want_accounting_module' => $wantAccounting,
+            'want_cash_closure_module' => $wantCash,
+            'want_customization' => $wantCustom,
+            'estimated_price' => $estimated,
+            'note' => $data['note'] ?? null,
+            'status' => 'approved',
+        ]);
+
+        $customPlan = SubscriptionPlan::create([
+            'name' => 'Personnalisé - '.now()->format('d/m/Y H:i'),
+            'monthly_price' => $estimated,
+            'annual_price' => round($estimated * 12 * 0.9, 2),
+            'max_agencies' => $agencies,
+            'max_employees' => $employees,
+            'allow_customization' => $wantCustom,
+            'allow_cash_closure_module' => $wantCash,
+            'allow_accounting_module' => $wantAccounting,
+            'allow_stock_module' => $wantStock,
+            'is_custom' => true,
+            'pressing_id' => $pressingId,
+        ]);
+
+        $start = now()->startOfDay();
+        $end = $data['billing_cycle'] === 'monthly' ? now()->addMonth()->endOfDay() : now()->addYear()->endOfDay();
+        OwnerSubscription::where('pressing_id', $pressingId)->where('is_active', true)->update(['is_active' => false]);
+        OwnerSubscription::create([
+            'pressing_id' => $pressingId,
+            'subscription_plan_id' => $customPlan->id,
+            'billing_cycle' => $data['billing_cycle'],
+            'starts_at' => $start->toDateString(),
+            'ends_at' => $end->toDateString(),
+            'is_active' => true,
+        ]);
+
+        return redirect()->route('owner.ui.pricing')->with('success', 'Pack personnalisé activé. Prix: '.number_format($estimated, 0, ',', ' ').' FCFA.');
     }
 
     public function stats(Request $request)
@@ -1413,6 +1677,104 @@ class OwnerUiController extends Controller
     }
 
 
+    private function normalizeStockMovementPayload(Pressing $pressing, array $data): array
+    {
+        $resolveAgency = function ($agencyId) use ($pressing) {
+            if (! $agencyId) {
+                return null;
+            }
+
+            return Agency::where('id', $agencyId)->where('pressing_id', $pressing->id)->firstOrFail()->id;
+        };
+
+        $sourceAgencyId = $resolveAgency($data['source_agency_id'] ?? null);
+        $targetAgencyId = $resolveAgency($data['target_agency_id'] ?? null);
+        $agencyId = null;
+
+        if ($data['movement_type'] === 'entree') {
+            $agencyId = $targetAgencyId;
+            if ($sourceAgencyId && ! $targetAgencyId) {
+                return [null, null, null, 'Pour une entrée, indiquez une destination (agence ou magasin central).'];
+            }
+            $sourceAgencyId = null;
+            $targetAgencyId = null;
+        }
+
+        if (in_array($data['movement_type'], ['sortie', 'perte_casse'], true)) {
+            $agencyId = $sourceAgencyId;
+            if ($targetAgencyId && ! $sourceAgencyId) {
+                return [null, null, null, 'Pour une sortie/perte, indiquez une source (agence ou magasin central).'];
+            }
+            $sourceAgencyId = null;
+            $targetAgencyId = null;
+        }
+
+        if ($data['movement_type'] === 'transfert') {
+            if ($pressing->stock_mode === 'agency') {
+                return [null, null, null, 'Le mode Stock par agence ne permet pas les transferts centralisés.'];
+            }
+
+            if ($sourceAgencyId && $targetAgencyId) {
+                return [null, null, null, 'Transfert agence → agence interdit. Utilisez magasin central ↔ agence.'];
+            }
+
+            if (! $sourceAgencyId && ! $targetAgencyId) {
+                return [null, null, null, 'Choisissez une source ou une destination agence pour le transfert.'];
+            }
+        }
+
+        if ($pressing->stock_mode === 'agency' && $data['movement_type'] !== 'transfert' && ! $agencyId) {
+            return [null, null, null, 'En mode Stock par agence, vous devez cibler une agence via source/destination.'];
+        }
+
+        return [$agencyId, $sourceAgencyId, $targetAgencyId, null];
+    }
+
+    private function applyStockMovement(StockMovement $movement): void
+    {
+        if ($movement->movement_type === 'entree') {
+            $this->adjustStockBalance($movement->pressing_id, $movement->stock_item_id, $movement->agency_id, (float) $movement->quantity);
+
+            return;
+        }
+
+        if (in_array($movement->movement_type, ['sortie', 'perte_casse'], true)) {
+            $this->adjustStockBalance($movement->pressing_id, $movement->stock_item_id, $movement->agency_id, -(float) $movement->quantity);
+
+            return;
+        }
+
+        if ($movement->movement_type === 'transfert') {
+            $this->adjustStockBalance($movement->pressing_id, $movement->stock_item_id, $movement->source_agency_id, -(float) $movement->quantity);
+            $this->adjustStockBalance($movement->pressing_id, $movement->stock_item_id, $movement->target_agency_id, (float) $movement->quantity);
+        }
+    }
+
+    private function revertStockMovement(StockMovement $movement): void
+    {
+        if ($movement->movement_type === 'entree') {
+            $this->adjustStockBalance($movement->pressing_id, $movement->stock_item_id, $movement->agency_id, -(float) $movement->quantity);
+
+            return;
+        }
+
+        if (in_array($movement->movement_type, ['sortie', 'perte_casse'], true)) {
+            $this->adjustStockBalance($movement->pressing_id, $movement->stock_item_id, $movement->agency_id, (float) $movement->quantity);
+
+            return;
+        }
+
+        if ($movement->movement_type === 'transfert') {
+            $this->adjustStockBalance($movement->pressing_id, $movement->stock_item_id, $movement->source_agency_id, (float) $movement->quantity);
+            $this->adjustStockBalance($movement->pressing_id, $movement->stock_item_id, $movement->target_agency_id, -(float) $movement->quantity);
+        }
+    }
+
+    private function canEditStockMovement(StockMovement $movement): bool
+    {
+        return $movement->created_at && $movement->created_at->gte(now()->subHours(3));
+    }
+
     private function adjustStockBalance(int $pressingId, int $itemId, ?int $agencyId, float $delta): void
     {
         $balance = StockBalance::firstOrCreate(
@@ -1426,6 +1788,28 @@ class OwnerUiController extends Controller
         }
 
         $balance->update(['quantity' => $next]);
+    }
+
+    private function activePlan(int $pressingId): ?SubscriptionPlan
+    {
+        $subscription = OwnerSubscription::where('pressing_id', $pressingId)
+            ->where('is_active', true)
+            ->whereDate('ends_at', '>=', now()->toDateString())
+            ->with('plan')
+            ->latest('ends_at')
+            ->first();
+
+        return $subscription?->plan;
+    }
+
+    private function planAllows(int $pressingId, string $feature): bool
+    {
+        $plan = $this->activePlan($pressingId);
+        if (! $plan) {
+            return true;
+        }
+
+        return (bool) ($plan->{$feature} ?? true);
     }
 
     private function canCancelTransaction(Pressing $pressing, Transaction $transaction): bool
