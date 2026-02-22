@@ -42,27 +42,29 @@
         @if($section==='contracts')
             <div class="card mb-3"><div class="card-header">Créer un contrat</div><div class="card-body">
                 <form method="POST" action="{{ route('owner.ui.subscriptions-module.contracts.store') }}" class="row g-2">@csrf
-                    <div class="col-md-6"><select class="form-select" name="subscription_client_id" required><option value="">Client</option>@foreach($clients as $c)<option value="{{ $c->id }}">{{ $c->name }}</option>@endforeach</select></div>
-                    <div class="col-md-6"><input class="form-control" name="title" placeholder="Titre du contrat" required></div>
-                    <div class="col-md-4"><input class="form-control" type="date" name="starts_at" required></div>
-                    <div class="col-md-4"><input class="form-control" type="date" name="ends_at"></div>
-                    <div class="col-md-4"><select class="form-select" name="frequency" required>@foreach($frequencies as $k=>$label)<option value="{{ $k }}">{{ $label }}</option>@endforeach</select></div>
-                    <div class="col-md-6"><input class="form-control" type="number" min="0" step="0.01" name="price" placeholder="Prix du contrat" required></div>
-                    <div class="col-md-6"><input class="form-control" name="notes" placeholder="Notes"></div>
+                    <div class="col-md-6"><label class="form-label">Client</label><select class="form-select" name="subscription_client_id" required><option value="">Choisir un client</option>@foreach($clients as $c)<option value="{{ $c->id }}">{{ $c->name }}</option>@endforeach</select></div>
+                    <div class="col-md-6"><label class="form-label">Titre du contrat</label><input class="form-control" name="title" placeholder="Ex: Contrat Hôtel X" required></div>
+                    <div class="col-md-4"><label class="form-label">Date de début</label><input class="form-control" type="date" name="starts_at" required></div>
+                    <div class="col-md-4"><label class="form-label">Date de fin</label><input class="form-control" type="date" name="ends_at"></div>
+                    <div class="col-md-2"><label class="form-label">Fréquence</label><input class="form-control" type="number" min="1" max="365" name="frequency_interval" value="1" required></div>
+                    <div class="col-md-2"><label class="form-label">Unité</label><select class="form-select" name="frequency_unit" required>@foreach($frequencyUnits as $k=>$label)<option value="{{ $k }}">{{ $label }}</option>@endforeach</select></div>
+                    <div class="col-md-6"><label class="form-label">Prix du contrat</label><input class="form-control" type="number" min="0" step="0.01" name="price" required></div>
+                    <div class="col-md-6"><label class="form-label">Notes</label><input class="form-control" name="notes" placeholder="Notes"></div>
                     <div class="col-12"><button class="btn btn-primary">Créer contrat</button></div>
                 </form>
             </div></div>
 
-            <div class="card"><div class="card-header">Liste des contrats</div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Client</th><th>Période</th><th>Fréquence</th><th>Prix</th><th>Actions</th></tr></thead><tbody>
+            <div class="card"><div class="card-header">Liste des contrats</div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Client</th><th>Période</th><th>Fréquence</th><th>Statut</th><th>Prix</th><th>Actions</th></tr></thead><tbody>
                 @forelse($contracts as $contract)
                 <tr>
                     <td>{{ $contract->client?->name }}<div class="small text-muted">{{ $contract->title }}</div></td>
                     <td>{{ $contract->starts_at?->format('d/m/Y') }} - {{ $contract->ends_at?->format('d/m/Y') ?? 'Sans fin' }}</td>
-                    <td>{{ $frequencies[$contract->frequency] ?? $contract->frequency }}</td>
+                    <td>Tous les {{ $contract->frequency_interval }} {{ $frequencyUnits[$contract->frequency_unit] ?? $contract->frequency_unit }}</td>
+                    <td><span class="badge bg-{{ $contract->status?->badge_class ?? 'secondary' }}{{ ($contract->status?->badge_class==='warning') ? ' text-dark' : '' }}">{{ $contract->status?->label ?? '-' }}</span></td>
                     <td>{{ number_format($contract->price,0,',',' ') }} FCFA</td>
                     <td><button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editContract{{ $contract->id }}">Modifier</button></td>
                 </tr>
-                @empty <tr><td colspan="5" class="text-center text-muted">Aucun contrat</td></tr> @endforelse
+                @empty <tr><td colspan="6" class="text-center text-muted">Aucun contrat</td></tr> @endforelse
             </tbody></table></div></div>
         @endif
 
@@ -113,10 +115,10 @@
 <input class="form-control" name="title" value="{{ $contract->title }}" required>
 <input class="form-control" type="date" name="starts_at" value="{{ $contract->starts_at?->toDateString() }}" required>
 <input class="form-control" type="date" name="ends_at" value="{{ $contract->ends_at?->toDateString() }}">
-<select class="form-select" name="frequency">@foreach($frequencies as $k=>$label)<option value="{{ $k }}" @selected($contract->frequency===$k)>{{ $label }}</option>@endforeach</select>
+<div class="row g-2"><div class="col-6"><label class="form-label">Fréquence</label><input class="form-control" type="number" min="1" max="365" name="frequency_interval" value="{{ $contract->frequency_interval }}" required></div><div class="col-6"><label class="form-label">Unité</label><select class="form-select" name="frequency_unit">@foreach($frequencyUnits as $k=>$label)<option value="{{ $k }}" @selected($contract->frequency_unit===$k)>{{ $label }}</option>@endforeach</select></div></div>
 <input class="form-control" type="number" min="0" step="0.01" name="price" value="{{ $contract->price }}" required>
 <input class="form-control" name="notes" value="{{ $contract->notes }}">
-<div class="form-check"><input class="form-check-input" type="checkbox" value="1" name="is_active" id="active{{ $contract->id }}" @checked($contract->is_active)><label class="form-check-label" for="active{{ $contract->id }}">Actif</label></div>
+<label class="form-label">Statut du contrat</label><select class="form-select" name="subscription_contract_status_id" required>@foreach($contractStatuses as $status)<option value="{{ $status->id }}" @selected($contract->subscription_contract_status_id===$status->id)>{{ $status->label }}</option>@endforeach</select><div class="form-check"><input class="form-check-input" type="checkbox" value="1" name="is_active" id="active{{ $contract->id }}" @checked($contract->is_active)><label class="form-check-label" for="active{{ $contract->id }}">Actif</label></div>
 <button class="btn btn-primary">Enregistrer</button>
 </form></div></div></div></div>
 @endforeach

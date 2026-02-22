@@ -15,18 +15,26 @@ class SubscriptionContract extends Model
         'title',
         'starts_at',
         'ends_at',
-        'frequency',
+        'frequency_interval',
+        'frequency_unit',
         'price',
         'notes',
         'is_active',
+        'subscription_contract_status_id',
     ];
 
     protected $casts = [
         'starts_at' => 'date',
         'ends_at' => 'date',
         'price' => 'decimal:2',
+        'frequency_interval' => 'integer',
         'is_active' => 'boolean',
     ];
+
+    public function status()
+    {
+        return $this->belongsTo(SubscriptionContractStatus::class, 'subscription_contract_status_id');
+    }
 
     public function client()
     {

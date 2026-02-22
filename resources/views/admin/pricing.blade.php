@@ -29,6 +29,7 @@
                 <div class="form-check"><input class="form-check-input" type="checkbox" name="allow_cash_closure_module" value="1" id="create_allow_cash" checked><label class="form-check-label" for="create_allow_cash">Autoriser module clôture de caisse</label></div>
                 <div class="form-check"><input class="form-check-input" type="checkbox" name="allow_accounting_module" value="1" id="create_allow_accounting" checked><label class="form-check-label" for="create_allow_accounting">Autoriser module comptabilité</label></div>
                 <div class="form-check"><input class="form-check-input" type="checkbox" name="allow_stock_module" value="1" id="create_allow_stock" checked><label class="form-check-label" for="create_allow_stock">Autoriser module stock</label></div>
+                <div class="form-check"><input class="form-check-input" type="checkbox" name="allow_subscription_module" value="1" id="create_allow_subscription" checked><label class="form-check-label" for="create_allow_subscription">Autoriser module abonnements clients</label></div>
                 <button class="btn btn-primary">Créer pack</button>
               </form>
             </div>
@@ -56,6 +57,7 @@
                       <div class="form-check"><input class="form-check-input" type="checkbox" name="allow_cash_closure_module" value="1" id="allow_cash_{{ $plan->id }}" @checked($plan->allow_cash_closure_module)><label class="form-check-label" for="allow_cash_{{ $plan->id }}">Clôture caisse</label></div>
                       <div class="form-check"><input class="form-check-input" type="checkbox" name="allow_accounting_module" value="1" id="allow_accounting_{{ $plan->id }}" @checked($plan->allow_accounting_module)><label class="form-check-label" for="allow_accounting_{{ $plan->id }}">Comptabilité</label></div>
                       <div class="form-check"><input class="form-check-input" type="checkbox" name="allow_stock_module" value="1" id="allow_stock_{{ $plan->id }}" @checked($plan->allow_stock_module)><label class="form-check-label" for="allow_stock_{{ $plan->id }}">Stock</label></div>
+                      <div class="form-check"><input class="form-check-input" type="checkbox" name="allow_subscription_module" value="1" id="allow_subscription_{{ $plan->id }}" @checked($plan->allow_subscription_module)><label class="form-check-label" for="allow_subscription_{{ $plan->id }}">Abonnements clients</label></div>
                     </div>
                     <div class="col-md-4 d-grid"><button class="btn btn-outline-primary">Mettre à jour</button></div>
                   </form>

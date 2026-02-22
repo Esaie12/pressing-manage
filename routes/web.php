@@ -71,6 +71,7 @@ Route::middleware(['auth', RoleMiddleware::class.':owner'])->prefix('owner')->gr
     Route::post('/ui/modules/cash-closure/toggle', [OwnerUiController::class, 'toggleCashClosureModule'])->name('owner.ui.modules.cash-closure.toggle');
     Route::post('/ui/modules/accounting/toggle', [OwnerUiController::class, 'toggleAccountingModule'])->name('owner.ui.modules.accounting.toggle');
     Route::post('/ui/modules/stock/toggle', [OwnerUiController::class, 'toggleStockModule'])->name('owner.ui.modules.stock.toggle');
+    Route::post('/ui/modules/subscriptions/toggle', [OwnerUiController::class, 'toggleSubscriptionModule'])->name('owner.ui.modules.subscriptions.toggle');
     Route::get('/ui/agencies', [OwnerUiController::class, 'agencies'])->name('owner.ui.agencies');
     Route::post('/ui/agencies', [OwnerUiController::class, 'storeAgency'])->name('owner.ui.agencies.store');
     Route::post('/ui/agencies/{agency}/toggle', [OwnerUiController::class, 'toggleAgency'])->name('owner.ui.agencies.toggle');

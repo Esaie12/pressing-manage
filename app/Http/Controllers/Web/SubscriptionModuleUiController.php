@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\Agency;
+use App\Models\Pressing;
 use App\Models\SubscriptionClient;
 use App\Models\SubscriptionContract;
+use App\Models\SubscriptionContractStatus;
 use App\Models\SubscriptionOrder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -15,6 +17,9 @@ class SubscriptionModuleUiController extends Controller
     public function index(Request $request)
     {
         $pressingId = Auth::user()->pressing_id;
+        $pressing = Pressing::findOrFail($pressingId);
+        abort_if(! $pressing->module_subscription_enabled, 403, 'Module Abonnements non activé.');
+
         $section = in_array($request->query('section'), ['clients', 'contracts', 'orders'], true)
             ? $request->query('section')
             : 'clients';
@@ -22,16 +27,20 @@ class SubscriptionModuleUiController extends Controller
         return view('owner.subscription-module', [
             'section' => $section,
             'clients' => SubscriptionClient::where('pressing_id', $pressingId)->orderByDesc('id')->get(),
-            'contracts' => SubscriptionContract::where('pressing_id', $pressingId)->with('client')->orderByDesc('id')->get(),
+            'contracts' => SubscriptionContract::where('pressing_id', $pressingId)->with(['client', 'status'])->orderByDesc('id')->get(),
             'orders' => SubscriptionOrder::where('pressing_id', $pressingId)->with('contract.client')->orderByDesc('id')->get(),
             'agencies' => Agency::where('pressing_id', $pressingId)->orderBy('name')->get(),
             'statuses' => ['pending' => 'En préparation', 'ready' => 'Prête', 'delivered' => 'Livrée'],
-            'frequencies' => ['day' => 'Jour', 'week' => 'Semaine', 'month' => 'Mois'],
+            'frequencyUnits' => ['day' => 'Jour(s)', 'week' => 'Semaine(s)', 'month' => 'Mois'],
+            'contractStatuses' => SubscriptionContractStatus::orderBy('sort_order')->get(),
         ]);
     }
 
     public function storeClient(Request $request)
     {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if(! $pressing->module_subscription_enabled, 403, 'Module Abonnements non activé.');
+
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'company_type' => ['nullable', 'string', 'max:120'],
@@ -75,17 +84,24 @@ class SubscriptionModuleUiController extends Controller
 
     public function storeContract(Request $request)
     {
+        $activeStatusId = SubscriptionContractStatus::where('code', 'active')->value('id');
+
         $data = $request->validate([
             'subscription_client_id' => ['required', 'exists:subscription_clients,id'],
             'title' => ['required', 'string', 'max:140'],
             'starts_at' => ['required', 'date'],
             'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
-            'frequency' => ['required', 'in:day,week,month'],
+            'frequency_interval' => ['required', 'integer', 'min:1', 'max:365'],
+            'frequency_unit' => ['required', 'in:day,week,month'],
             'price' => ['required', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        SubscriptionContract::create($data + ['pressing_id' => Auth::user()->pressing_id, 'is_active' => true]);
+        SubscriptionContract::create($data + [
+            'pressing_id' => Auth::user()->pressing_id,
+            'is_active' => true,
+            'subscription_contract_status_id' => $activeStatusId,
+        ]);
 
         return redirect()->route('owner.ui.subscriptions-module', ['section' => 'contracts'])->with('success', 'Contrat ajouté.');
     }
@@ -98,10 +114,12 @@ class SubscriptionModuleUiController extends Controller
             'title' => ['required', 'string', 'max:140'],
             'starts_at' => ['required', 'date'],
             'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
-            'frequency' => ['required', 'in:day,week,month'],
+            'frequency_interval' => ['required', 'integer', 'min:1', 'max:365'],
+            'frequency_unit' => ['required', 'in:day,week,month'],
             'price' => ['required', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'is_active' => ['nullable', 'boolean'],
+            'subscription_contract_status_id' => ['required', 'exists:subscription_contract_statuses,id'],
         ]);
 
         $contract->update($data + ['is_active' => (bool) ($data['is_active'] ?? false)]);

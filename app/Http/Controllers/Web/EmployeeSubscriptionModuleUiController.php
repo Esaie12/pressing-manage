@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Models\Pressing;
 use App\Models\SubscriptionContract;
 use App\Models\SubscriptionOrder;
 use Illuminate\Http\Request;
@@ -13,6 +14,8 @@ class EmployeeSubscriptionModuleUiController extends Controller
     public function index()
     {
         $employee = Auth::user();
+        $pressing = Pressing::findOrFail($employee->pressing_id);
+        abort_if(! $pressing->module_subscription_enabled, 403, 'Module Abonnements non activé.');
 
         return view('employee/subscription-orders', [
             'contracts' => SubscriptionContract::where('pressing_id', $employee->pressing_id)
@@ -31,6 +34,8 @@ class EmployeeSubscriptionModuleUiController extends Controller
     public function store(Request $request)
     {
         $employee = Auth::user();
+        $pressing = Pressing::findOrFail($employee->pressing_id);
+        abort_if(! $pressing->module_subscription_enabled, 403, 'Module Abonnements non activé.');
 
         $data = $request->validate([
             'subscription_contract_id' => ['required', 'exists:subscription_contracts,id'],
@@ -53,6 +58,8 @@ class EmployeeSubscriptionModuleUiController extends Controller
 
     public function updateStatus(Request $request, SubscriptionOrder $order)
     {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if(! $pressing->module_subscription_enabled, 403, 'Module Abonnements non activé.');
         abort_unless($order->pressing_id === Auth::user()->pressing_id, 403);
 
         $data = $request->validate(['status' => ['required', 'in:pending,ready,delivered']]);

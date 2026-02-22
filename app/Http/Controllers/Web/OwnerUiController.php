@@ -104,6 +104,22 @@ class OwnerUiController extends Controller
     }
 
 
+
+    public function toggleSubscriptionModule()
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+
+        if (! $this->planAllows($pressing->id, 'allow_subscription_module')) {
+            return redirect()->route('owner.ui.dashboard')->with('error', 'Votre pack ne permet pas le module Abonnements clients.');
+        }
+
+        $pressing->update(['module_subscription_enabled' => ! $pressing->module_subscription_enabled]);
+
+        return redirect()->route('owner.ui.dashboard')->with('success', $pressing->module_subscription_enabled
+            ? 'Module Abonnements clients activé.'
+            : 'Module Abonnements clients désactivé.');
+    }
+
     public function toggleStockModule(Request $request)
     {
         $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
@@ -1271,6 +1287,9 @@ class OwnerUiController extends Controller
         if ($pressing->module_stock_enabled && ! $plan->allow_stock_module) {
             return redirect()->route('owner.ui.pricing')->with('error', 'Désactivez le module Stock avant de prendre ce pack.');
         }
+        if ($pressing->module_subscription_enabled && ! $plan->allow_subscription_module) {
+            return redirect()->route('owner.ui.pricing')->with('error', 'Désactivez le module Abonnements clients avant de prendre ce pack.');
+        }
 
         OwnerSubscription::where('pressing_id', Auth::user()->pressing_id)->where('is_active', true)->update(['is_active' => false]);
 
@@ -1295,6 +1314,7 @@ class OwnerUiController extends Controller
             'want_accounting_module' => ['nullable', 'boolean'],
             'want_cash_closure_module' => ['nullable', 'boolean'],
             'want_customization' => ['nullable', 'boolean'],
+            'want_subscription_module' => ['nullable', 'boolean'],
             'note' => ['nullable', 'string', 'max:2000'],
             'billing_cycle' => ['required', 'in:monthly,annual'],
         ]);
@@ -1313,6 +1333,7 @@ class OwnerUiController extends Controller
         $wantAccounting = (bool) ($data['want_accounting_module'] ?? false);
         $wantCash = (bool) ($data['want_cash_closure_module'] ?? false);
         $wantCustom = (bool) ($data['want_customization'] ?? false);
+        $wantSubscription = (bool) ($data['want_subscription_module'] ?? false);
 
         if ($wantStock) {
             $estimated += (float) $pricing->price_module_stock;
@@ -1352,6 +1373,7 @@ class OwnerUiController extends Controller
             'allow_cash_closure_module' => $wantCash,
             'allow_accounting_module' => $wantAccounting,
             'allow_stock_module' => $wantStock,
+            'allow_subscription_module' => $wantSubscription,
             'is_custom' => true,
             'pressing_id' => $pressingId,
         ]);
