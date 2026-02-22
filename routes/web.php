@@ -11,6 +11,8 @@ use App\Http\Controllers\Web\AdminUiController;
 use App\Http\Controllers\Web\EmployeeUiController;
 use App\Http\Controllers\Web\NotificationUiController;
 use App\Http\Controllers\Web\OwnerUiController;
+use App\Http\Controllers\Web\SubscriptionModuleUiController;
+use App\Http\Controllers\Web\EmployeeSubscriptionModuleUiController;
 use App\Http\Controllers\Web\ProfileUiController;
 use App\Http\Middleware\RoleMiddleware;
 use Illuminate\Support\Facades\Route;
@@ -132,6 +134,15 @@ Route::middleware(['auth', RoleMiddleware::class.':owner'])->prefix('owner')->gr
     Route::post('/ui/accounting/settings', [OwnerUiController::class, 'saveAccountingSettings'])->name('owner.ui.accounting.settings.save');
     Route::get('/ui/accounting/reports', [OwnerUiController::class, 'accountingReports'])->name('owner.ui.accounting.reports');
     Route::post('/ui/accounting/reports', [OwnerUiController::class, 'saveAccountingReport'])->name('owner.ui.accounting.reports.save');
+    Route::get('/ui/subscriptions-module', [SubscriptionModuleUiController::class, 'index'])->name('owner.ui.subscriptions-module');
+    Route::post('/ui/subscriptions-module/clients', [SubscriptionModuleUiController::class, 'storeClient'])->name('owner.ui.subscriptions-module.clients.store');
+    Route::post('/ui/subscriptions-module/clients/{client}', [SubscriptionModuleUiController::class, 'updateClient'])->name('owner.ui.subscriptions-module.clients.update');
+    Route::post('/ui/subscriptions-module/clients/{client}/delete', [SubscriptionModuleUiController::class, 'destroyClient'])->name('owner.ui.subscriptions-module.clients.delete');
+    Route::post('/ui/subscriptions-module/contracts', [SubscriptionModuleUiController::class, 'storeContract'])->name('owner.ui.subscriptions-module.contracts.store');
+    Route::post('/ui/subscriptions-module/contracts/{contract}', [SubscriptionModuleUiController::class, 'updateContract'])->name('owner.ui.subscriptions-module.contracts.update');
+    Route::post('/ui/subscriptions-module/orders', [SubscriptionModuleUiController::class, 'storeOrder'])->name('owner.ui.subscriptions-module.orders.store');
+    Route::post('/ui/subscriptions-module/orders/{order}/status', [SubscriptionModuleUiController::class, 'updateOrderStatus'])->name('owner.ui.subscriptions-module.orders.status');
+
     Route::get('/ui/accounting/reports/{report}', [OwnerUiController::class, 'showAccountingReport'])->name('owner.ui.accounting.reports.show');
 });
 
@@ -164,5 +175,9 @@ Route::middleware(['auth', RoleMiddleware::class.':employee'])->prefix('employee
     Route::get('/ui/cash-closures/{cashClosure}', [EmployeeUiController::class, 'showCashClosure'])->name('employee.ui.cash-closures.show');
     Route::post('/ui/transactions/{transaction}/cancel', [EmployeeUiController::class, 'cancelTransaction'])->name('employee.ui.transactions.cancel');
     Route::get('/ui/invoices/{invoice}', [EmployeeUiController::class, 'showInvoice'])->name('employee.ui.invoices.show');
+    Route::get('/ui/subscription-orders', [EmployeeSubscriptionModuleUiController::class, 'index'])->name('employee.ui.subscription-orders');
+    Route::post('/ui/subscription-orders', [EmployeeSubscriptionModuleUiController::class, 'store'])->name('employee.ui.subscription-orders.store');
+    Route::post('/ui/subscription-orders/{order}/status', [EmployeeSubscriptionModuleUiController::class, 'updateStatus'])->name('employee.ui.subscription-orders.status');
+
     Route::post('/ui/invoices/{invoice}/delete', [EmployeeUiController::class, 'destroyInvoice'])->name('employee.ui.invoices.delete');
 });
