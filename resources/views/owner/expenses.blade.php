@@ -21,10 +21,11 @@
 <div class="card shadow-sm">
   <div class="card-header bg-white"><strong>Historique des dépenses</strong></div>
   <div class="card-body table-responsive">
+    @if(count($expenses) >0)
     <table class="table table-striped datatable align-middle">
       <thead><tr><th>Date</th><th>Titre</th><th>Catégorie</th><th>Agence</th><th>Montant</th><th>Actions</th></tr></thead>
       <tbody>
-        @forelse($expenses as $expense)
+        @foreach($expenses as $expense)
           <tr>
             <td>{{ optional($expense->expense_date)->format('d/m/Y') }}</td>
             <td>{{ $expense->title }}</td>
@@ -37,11 +38,14 @@
               <form method="POST" action="{{ route('owner.ui.expenses.delete', $expense) }}" onsubmit="return confirm('Supprimer cette dépense ?')">@csrf<button class="btn btn-sm btn-outline-danger">Supprimer</button></form>
             </td>
           </tr>
-        @empty
-          <tr><td colspan="6" class="text-center text-muted">Aucune dépense</td></tr>
-        @endforelse
+        @endforeach
       </tbody>
     </table>
+    @else 
+    <div class="text-center py-4 text-danger">
+               Aucune dépense
+              </div>
+    @endif
   </div>
 </div>
 

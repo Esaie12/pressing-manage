@@ -16,7 +16,7 @@ class PressingDemoSeeder extends Seeder
     public function run(): void
     {
         $owner = User::updateOrCreate(
-            ['email' => 'owner@pressing.local'],
+            ['email' => 'owner@gmail.com'],
             [
                 'name' => 'Propriétaire Démo',
                 'password' => Hash::make('password'),
@@ -37,7 +37,7 @@ class PressingDemoSeeder extends Seeder
         );
 
         User::updateOrCreate(
-            ['email' => 'employee@pressing.local'],
+            ['email' => 'employee@gmail.com'],
             [
                 'name' => 'Employé Démo',
                 'password' => Hash::make('password'),

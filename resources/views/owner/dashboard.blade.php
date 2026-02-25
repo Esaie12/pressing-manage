@@ -35,7 +35,7 @@
   <div class="col-lg-6">
     <div class="card shadow-sm h-100">
       <div class="card-body d-flex flex-column gap-2">
-        <h5 class="mb-0">4) Clôture de caisse journalière (par agence/employé)</h5>
+        <h5 class="mb-0">Clôture de caisse journalière (par agence/employé)</h5>
         <div class="text-muted small">Activez ce module pour afficher le menu de clôture et gérer les clôtures de caisse.</div>
         <div class="mt-2 d-flex gap-2 align-items-center">
           <form method="POST" action="{{ route('owner.ui.modules.cash-closure.toggle') }}">
@@ -49,18 +49,6 @@
       </div>
     </div>
   </div>
-
-  <div class="col-lg-6">
-    <div class="card shadow-sm h-100 border-warning-subtle">
-      <div class="card-body d-flex flex-column gap-2">
-        <h5 class="mb-0">1) Notifications client automatiques (SMS / WhatsApp)</h5>
-        <div class="text-muted">Bientôt disponible.</div>
-      </div>
-    </div>
-  </div>
-
-
-
 
   <div class="col-lg-6">
     <div class="card shadow-sm h-100">
@@ -125,5 +113,23 @@
       </div>
     </div>
   </div>
+
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100 border-warning-subtle">
+      <div class="card-body d-flex flex-column gap-2">
+        <h5 class="mb-0">Notifications client automatiques (SMS / WhatsApp)</h5>
+        <div class="text-muted">Bientôt disponible.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100 border-warning-subtle">
+      <div class="card-body d-flex flex-column gap-2">
+        <h5 class="mb-0">Facture normalisée</h5>
+        <div class="text-muted">Bientôt disponible.</div>
+      </div>
+    </div>
+  </div>
+
 </div>
 @endsection
