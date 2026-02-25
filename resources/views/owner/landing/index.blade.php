@@ -2,21 +2,14 @@
 @section('title','Owner - Landing Page')
 @section('heading','Owner • Landing Page')
 @section('content')
-<style>
-  .cms-menu .list-group-item{cursor:pointer}
-  .cms-menu .list-group-item.active{font-weight:600}
-  .cms-panel{display:none}
-  .cms-panel.active{display:block}
-</style>
-
 <div class="row g-3">
   <div class="col-lg-3">
     <div class="list-group shadow-sm cms-menu" id="cmsMenu">
-      <button type="button" class="list-group-item list-group-item-action active" data-target="general">Paramètres généraux</button>
-      <button type="button" class="list-group-item list-group-item-action" data-target="template">Choix du template</button>
-      <button type="button" class="list-group-item list-group-item-action" data-target="sections">Sections</button>
-      <button type="button" class="list-group-item list-group-item-action" data-target="seo">SEO</button>
-      <button type="button" class="list-group-item list-group-item-action" data-target="publication">Publication</button>
+      <a href="#general" class="list-group-item list-group-item-action">Paramètres généraux</a>
+      <a href="#template" class="list-group-item list-group-item-action">Choix du template</a>
+      <a href="#sections" class="list-group-item list-group-item-action">Sections</a>
+      <a href="#seo" class="list-group-item list-group-item-action">SEO</a>
+      <a href="#publication" class="list-group-item list-group-item-action">Publication</a>
     </div>
     <div class="card shadow-sm mt-3">
       <div class="card-body small">
@@ -27,66 +20,65 @@
   </div>
 
   <div class="col-lg-9">
-    <form method="POST" action="{{ route('owner.ui.landing.settings.update') }}" class="card shadow-sm mb-3">
+    <form method="POST" action="{{ route('owner.ui.landing.settings.update') }}" class="vstack gap-3">
       @csrf
-      <div class="card-body">
-        <div class="cms-panel active" data-panel="general">
-          <h5 class="mb-3">Paramètres généraux</h5>
-          <div class="row g-3">
-            <div class="col-md-6"><label class="form-label">Nom du pressing</label><input class="form-control" name="name" value="{{ old('name', $landing->name) }}" required></div>
-            <div class="col-md-6"><label class="form-label">Slug URL</label><input class="form-control" name="slug" value="{{ old('slug', $landing->slug) }}" required></div>
-            <div class="col-md-12"><label class="form-label">Accroche</label><input class="form-control" name="tagline" value="{{ old('tagline', $landing->tagline) }}"></div>
-            <div class="col-md-6"><label class="form-label">WhatsApp</label><input class="form-control" name="whatsapp_number" value="{{ old('whatsapp_number', $landing->whatsapp_number) }}"></div>
-            <div class="col-md-6"><label class="form-label">Email contact</label><input type="email" class="form-control" name="contact_email" value="{{ old('contact_email', $landing->contact_email) }}"></div>
-          </div>
-        </div>
 
-        <div class="cms-panel" data-panel="template">
-          <h5 class="mb-3">Choix du template</h5>
-          <div class="row g-3">
-            <div class="col-md-6"><label class="form-label">Template</label>
-              <select class="form-select" name="template_key" required>
-                <option value="minimal_clean" @selected(old('template_key', $landing->template_key)==='minimal_clean')>Template A - minimal clean</option>
-                <option value="minimal_business" @selected(old('template_key', $landing->template_key)==='minimal_business')>Template B - minimal business</option>
-                <option value="minimal_modern" @selected(old('template_key', $landing->template_key)==='minimal_modern')>Template C - minimal modern</option>
-              </select>
-            </div>
-            <div class="col-md-3"><label class="form-label">Couleur principale</label><input type="color" class="form-control form-control-color" name="primary_color" value="{{ old('primary_color', $landing->primary_color ?? '#0d6efd') }}"></div>
-            <div class="col-md-3"><label class="form-label">Couleur secondaire</label><input type="color" class="form-control form-control-color" name="secondary_color" value="{{ old('secondary_color', $landing->secondary_color ?? '#20c997') }}"></div>
-          </div>
+      <div class="card shadow-sm" id="general">
+        <div class="card-header">Paramètres généraux</div>
+        <div class="card-body row g-3">
+          <div class="col-md-6"><label class="form-label">Nom du pressing</label><input class="form-control" name="name" value="{{ old('name', $landing->name) }}" required></div>
+          <div class="col-md-6"><label class="form-label">Slug URL</label><input class="form-control" name="slug" value="{{ old('slug', $landing->slug) }}" required></div>
+          <div class="col-md-12"><label class="form-label">Accroche</label><input class="form-control" name="tagline" value="{{ old('tagline', $landing->tagline) }}"></div>
+          <div class="col-md-6"><label class="form-label">WhatsApp</label><input class="form-control" name="whatsapp_number" value="{{ old('whatsapp_number', $landing->whatsapp_number) }}"></div>
+          <div class="col-md-6"><label class="form-label">Email contact</label><input type="email" class="form-control" name="contact_email" value="{{ old('contact_email', $landing->contact_email) }}"></div>
         </div>
-
-        <div class="cms-panel" data-panel="seo">
-          <h5 class="mb-3">SEO</h5>
-          <div class="row g-3">
-            <div class="col-md-6"><label class="form-label">SEO title</label><input class="form-control" name="meta_title" value="{{ old('meta_title', $landing->meta_title) }}"></div>
-            <div class="col-md-6"><label class="form-label">SEO description</label><input class="form-control" name="meta_description" value="{{ old('meta_description', $landing->meta_description) }}"></div>
-          </div>
-        </div>
-
-        <div class="cms-panel" data-panel="publication">
-          <h5 class="mb-3">Publication</h5>
-          <div class="row g-3">
-            <div class="col-md-4"><label class="form-label">Statut</label>
-              <select class="form-select" name="status" required>
-                <option value="draft" @selected(old('status', $landing->status)==='draft')>Brouillon</option>
-                <option value="published" @selected(old('status', $landing->status)==='published')>Publié</option>
-              </select>
-            </div>
-            <div class="col-md-4"><label class="form-label">Hero title</label><input class="form-control" name="hero_title" value="{{ old('hero_title', $landing->hero_title) }}"></div>
-            <div class="col-md-4"><label class="form-label">Hero subtitle</label><input class="form-control" name="hero_subtitle" value="{{ old('hero_subtitle', $landing->hero_subtitle) }}"></div>
-            <div class="col-md-6"><label class="form-label">Titre À propos</label><input class="form-control" name="about_title" value="{{ old('about_title', $landing->about_title) }}"></div>
-            <div class="col-md-6"><label class="form-label">Titre Contact</label><input class="form-control" name="contact_title" value="{{ old('contact_title', $landing->contact_title) }}"></div>
-            <div class="col-md-12"><label class="form-label">Texte À propos</label><textarea class="form-control" rows="3" name="about_body">{{ old('about_body', $landing->about_body) }}</textarea></div>
-            <div class="col-md-12"><label class="form-label">Footer</label><input class="form-control" name="footer_text" value="{{ old('footer_text', $landing->footer_text) }}"></div>
-          </div>
-        </div>
-
-        <div class="d-flex justify-content-end mt-3"><button class="btn btn-primary">Enregistrer</button></div>
       </div>
+
+      <div class="card shadow-sm" id="template">
+        <div class="card-header">Choix du template</div>
+        <div class="card-body row g-3">
+          <div class="col-md-6"><label class="form-label">Template</label>
+            <select class="form-select" name="template_key" required>
+              <option value="minimal_clean" @selected(old('template_key', $landing->template_key)==='minimal_clean')>Template Clean (v0)</option>
+              <option value="minimal_business" @selected(old('template_key', $landing->template_key)==='minimal_business')>Template Version 1 (Syne/DM Sans)</option>
+              <option value="minimal_modern" @selected(old('template_key', $landing->template_key)==='minimal_modern')>Template Version 2 (Luxe sombre)</option>
+            </select>
+          </div>
+          <div class="col-md-3"><label class="form-label">Couleur principale</label><input type="color" class="form-control form-control-color" name="primary_color" value="{{ old('primary_color', $landing->primary_color ?? '#0d6efd') }}"></div>
+          <div class="col-md-3"><label class="form-label">Couleur secondaire</label><input type="color" class="form-control form-control-color" name="secondary_color" value="{{ old('secondary_color', $landing->secondary_color ?? '#20c997') }}"></div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm" id="seo">
+        <div class="card-header">SEO</div>
+        <div class="card-body row g-3">
+          <div class="col-md-6"><label class="form-label">SEO title</label><input class="form-control" name="meta_title" value="{{ old('meta_title', $landing->meta_title) }}"></div>
+          <div class="col-md-6"><label class="form-label">SEO description</label><input class="form-control" name="meta_description" value="{{ old('meta_description', $landing->meta_description) }}"></div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm" id="publication">
+        <div class="card-header">Publication & contenus</div>
+        <div class="card-body row g-3">
+          <div class="col-md-4"><label class="form-label">Statut</label>
+            <select class="form-select" name="status" required>
+              <option value="draft" @selected(old('status', $landing->status)==='draft')>Brouillon</option>
+              <option value="published" @selected(old('status', $landing->status)==='published')>Publié</option>
+            </select>
+          </div>
+          <div class="col-md-4"><label class="form-label">Hero title</label><input class="form-control" name="hero_title" value="{{ old('hero_title', $landing->hero_title) }}"></div>
+          <div class="col-md-4"><label class="form-label">Hero subtitle</label><input class="form-control" name="hero_subtitle" value="{{ old('hero_subtitle', $landing->hero_subtitle) }}"></div>
+          <div class="col-md-6"><label class="form-label">Titre À propos</label><input class="form-control" name="about_title" value="{{ old('about_title', $landing->about_title) }}"></div>
+          <div class="col-md-6"><label class="form-label">Titre Contact</label><input class="form-control" name="contact_title" value="{{ old('contact_title', $landing->contact_title) }}"></div>
+          <div class="col-md-12"><label class="form-label">Texte À propos</label><textarea class="form-control" rows="3" name="about_body">{{ old('about_body', $landing->about_body) }}</textarea></div>
+          <div class="col-md-12"><label class="form-label">Footer</label><input class="form-control" name="footer_text" value="{{ old('footer_text', $landing->footer_text) }}"></div>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end"><button class="btn btn-primary">Enregistrer</button></div>
     </form>
 
-    <div class="card shadow-sm cms-panel" data-panel="sections">
+    <div class="card shadow-sm mt-3" id="sections">
       <div class="card-header">Sections visibles et ordre</div>
       <div class="card-body">
         <form method="POST" action="{{ route('owner.ui.landing.sections.update') }}" class="row g-2">
@@ -115,14 +107,4 @@
     </div>
   </div>
 </div>
-
-<script>
-  const menuButtons = document.querySelectorAll('#cmsMenu [data-target]');
-  const panels = document.querySelectorAll('.cms-panel');
-  function setPanel(target){
-    menuButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.target === target));
-    panels.forEach(panel => panel.classList.toggle('active', panel.dataset.panel === target));
-  }
-  menuButtons.forEach(btn => btn.addEventListener('click', () => setPanel(btn.dataset.target)));
-</script>
 @endsection
