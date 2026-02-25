@@ -13,6 +13,7 @@ class Pressing extends Model
         'module_cash_closure_enabled',
         'module_accounting_enabled',
         'module_stock_enabled',
+        'module_subscription_enabled',
         'stock_mode',
     ];
 
@@ -21,6 +22,7 @@ class Pressing extends Model
         'module_cash_closure_enabled' => 'boolean',
         'module_accounting_enabled' => 'boolean',
         'module_stock_enabled' => 'boolean',
+        'module_subscription_enabled' => 'boolean',
     ];
 
     public function owner()

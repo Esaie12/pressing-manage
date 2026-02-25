@@ -46,6 +46,7 @@
                 <div class="small">Module Stock: {!! $plan->allow_stock_module ? '<span class="badge text-bg-success">Oui</span>' : '<span class="badge text-bg-secondary">Non</span>' !!}</div>
                 <div class="small">Module Comptabilité: {!! $plan->allow_accounting_module ? '<span class="badge text-bg-success">Oui</span>' : '<span class="badge text-bg-secondary">Non</span>' !!}</div>
                 <div class="small">Module Clôture caisse: {!! $plan->allow_cash_closure_module ? '<span class="badge text-bg-success">Oui</span>' : '<span class="badge text-bg-secondary">Non</span>' !!}</div>
+                <div class="small">Module Abonnements clients: {!! $plan->allow_subscription_module ? '<span class="badge text-bg-success">Oui</span>' : '<span class="badge text-bg-secondary">Non</span>' !!}</div>
                 <form method="POST" action="{{ route('owner.ui.pricing.subscribe') }}" class="mt-3 vstack gap-2">
                   @csrf
                   <input type="hidden" name="subscription_plan_id" value="{{ $plan->id }}">
@@ -90,6 +91,7 @@
             <div class="form-check"><input id="cp_acc" class="form-check-input" type="checkbox" name="want_accounting_module" value="1"><label class="form-check-label" for="cp_acc">Module Comptabilité</label></div>
             <div class="form-check"><input id="cp_cash" class="form-check-input" type="checkbox" name="want_cash_closure_module" value="1"><label class="form-check-label" for="cp_cash">Module Clôture caisse</label></div>
             <div class="form-check"><input id="cp_custom" class="form-check-input" type="checkbox" name="want_customization" value="1"><label class="form-check-label" for="cp_custom">Personnalisation</label></div>
+            <div class="form-check"><input id="cp_subscription" class="form-check-input" type="checkbox" name="want_subscription_module" value="1"><label class="form-check-label" for="cp_subscription">Module Abonnements clients</label></div>
           </div>
           <div class="col-12"><label class="form-label">Note</label><input class="form-control" name="note" placeholder="Ajoutez une précision (optionnel)"></div>
           <div class="col-12 alert alert-info mb-0">Prix estimé en temps réel: <strong id="cp_price">0 FCFA</strong></div>
@@ -130,7 +132,7 @@
     if (document.getElementById('cp_custom').checked) total += pricing.custom;
     priceEl.textContent = new Intl.NumberFormat('fr-FR').format(Math.round(total)) + ' FCFA';
   };
-  ['cp_agencies','cp_employees','cp_stock','cp_acc','cp_cash','cp_custom'].forEach((id)=>{
+  ['cp_agencies','cp_employees','cp_stock','cp_acc','cp_cash','cp_custom','cp_subscription'].forEach((id)=>{
     const el = document.getElementById(id);
     if(el) el.addEventListener('input', calc);
     if(el) el.addEventListener('change', calc);

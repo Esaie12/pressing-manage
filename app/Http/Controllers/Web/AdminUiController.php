@@ -192,12 +192,14 @@ class AdminUiController extends Controller
             'allow_cash_closure_module' => ['nullable', 'boolean'],
             'allow_accounting_module' => ['nullable', 'boolean'],
             'allow_stock_module' => ['nullable', 'boolean'],
+            'allow_subscription_module' => ['nullable', 'boolean'],
         ]);
 
         $data['allow_customization'] = (bool) ($data['allow_customization'] ?? false);
         $data['allow_cash_closure_module'] = (bool) ($data['allow_cash_closure_module'] ?? false);
         $data['allow_accounting_module'] = (bool) ($data['allow_accounting_module'] ?? false);
         $data['allow_stock_module'] = (bool) ($data['allow_stock_module'] ?? false);
+        $data['allow_subscription_module'] = (bool) ($data['allow_subscription_module'] ?? false);
 
         return $data;
     }

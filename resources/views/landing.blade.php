@@ -45,26 +45,5 @@
     </div>
   </section>
 
-  <section class="py-5 bg-white border-top border-bottom">
-    <div class="container">
-      <div class="row g-3">
-        <div class="col-md-4"><img class="gallery-img" src="https://images.unsplash.com/photo-1521656693074-0ef32e80a5d5?auto=format&fit=crop&w=900&q=80" alt="Equipe pressing"></div>
-        <div class="col-md-4"><img class="gallery-img" src="https://images.unsplash.com/photo-1604335399105-a0c585fd81a1?auto=format&fit=crop&w=900&q=80" alt="Blanchisserie moderne"></div>
-        <div class="col-md-4"><img class="gallery-img" src="https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?auto=format&fit=crop&w=900&q=80" alt="Gestion pressing"></div>
-      </div>
-    </div>
-  </section>
-
-  <section class="py-5">
-    <div class="container">
-      <div class="card showcase-card shadow-sm">
-        <div class="card-body p-4 p-lg-5 text-center">
-          <h3 class="mb-3">Prêt à accélérer votre pressing ?</h3>
-          <p class="text-muted mb-4">Offrez à votre équipe un outil centralisé pour gérer, suivre et développer votre activité en toute simplicité.</p>
-          <a href="/login" class="btn btn-primary btn-lg">Commencer maintenant</a>
-        </div>
-      </div>
-    </div>
-  </section>
 </body>
 </html>

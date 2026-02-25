@@ -1,10 +1,11 @@
 @extends('layouts.app')
 @section('title','Owner - Demandes employés')
-@section('heading','Owner • Demandes employés')
+@section('heading','Owner - Demandes employés')
 @section('content')
 <div class="card shadow-sm">
   <div class="card-header bg-white">Demandes envoyées par les employés</div>
   <div class="table-responsive">
+    @if(count($requests ) >0)
     <table class="table table-striped datatable mb-0">
       <thead><tr><th>Date</th><th>Employé</th><th>Agence</th><th>Sujet</th><th>Statut</th><th>Action</th></tr></thead>
       <tbody>
@@ -39,6 +40,11 @@
         @endforelse
       </tbody>
     </table>
+    @else 
+    <div class="text-center py-4 text-danger">
+                Aucune demande employé.
+              </div>
+    @endif
   </div>
 </div>
 @endsection

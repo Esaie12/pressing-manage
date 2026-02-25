@@ -33,10 +33,11 @@
 <div class="card shadow-sm">
   <div class="card-header">Bilans sauvegardés</div>
   <div class="table-responsive">
+     @if(count($savedReports) >0)
     <table class="table datatable mb-0 align-middle">
       <thead><tr><th>Date sauvegarde</th><th>Mois</th><th>Agence</th><th>Crédits</th><th>Débits</th><th>Résultat net</th><th>Action</th></tr></thead>
       <tbody>
-      @forelse($savedReports as $report)
+      @foreach($savedReports as $report)
         <tr>
           <td>{{ $report->saved_at?->format('d/m/Y H:i') }}</td>
           <td>{{ $report->month?->format('m/Y') }}</td>
@@ -46,11 +47,14 @@
           <td>{{ number_format($report->net_result,0,',',' ') }} FCFA</td>
           <td><a class="btn btn-sm btn-outline-primary" href="{{ route('owner.ui.accounting.reports.show', $report) }}">Détails</a></td>
         </tr>
-      @empty
-        <tr><td colspan="7" class="text-center text-muted">Aucun bilan sauvegardé.</td></tr>
-      @endforelse
+      @endforeach
       </tbody>
     </table>
+    @else 
+        <div class="text-center py-4 text-danger">
+         Aucun bilan sauvegardé.
+        </div>
+        @endif
   </div>
 </div>
 @endsection

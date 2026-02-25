@@ -22,6 +22,11 @@ class StockItem extends Model
         'is_active' => 'boolean',
     ];
 
+    public function suppliers()
+    {
+        return $this->belongsToMany(Supplier::class, 'stock_item_supplier', 'stock_item_id', 'supplier_id')->withTimestamps();
+    }
+
     public function pressing()
     {
         return $this->belongsTo(Pressing::class);

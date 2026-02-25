@@ -26,10 +26,11 @@
     <div class="card">
       <div class="card-header">Mes employés</div>
       <div class="table-responsive">
+         @if(count($employees) >0)
         <table class="table mb-0 datatable align-middle">
           <thead><tr><th>Nom</th><th>Email</th><th>Agence</th><th>Statut</th><th>Action</th></tr></thead>
           <tbody>
-            @forelse($employees as $employee)
+            @foreach($employees as $employee)
               <tr>
                 <td>{{ $employee->name }}</td>
                 <td>{{ $employee->email }}</td>
@@ -40,11 +41,14 @@
                   <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#pwd{{ $employee->id }}">Nouveau mot de passe</button>
                 </td>
               </tr>
-            @empty
-              <tr><td colspan="5" class="text-center text-muted">Aucun employé</td></tr>
-            @endforelse
+             @endforeach
           </tbody>
         </table>
+        @else 
+        <div class="text-center py-4 text-danger">
+                 Aucun employé
+                  </div>
+        @endif
       </div>
     </div>
   </div>

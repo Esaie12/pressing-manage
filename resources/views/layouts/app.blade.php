@@ -67,9 +67,12 @@
 
                 @if(auth()->user()->role === \App\Models\User::ROLE_OWNER)
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {{ request()->routeIs('owner.ui.orders*','owner.ui.invoices*','owner.ui.requests*') ? 'active fw-semibold' : '' }}" href="#" role="button" data-bs-toggle="dropdown">Opérations</a>
+                        <a class="nav-link dropdown-toggle {{ request()->routeIs('owner.ui.orders*','owner.ui.invoices*','owner.ui.requests*','owner.ui.subscriptions-module*') ? 'active fw-semibold' : '' }}" href="#" role="button" data-bs-toggle="dropdown">Opérations</a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ route('owner.ui.orders') }}">Commandes</a></li>
+                            @if($ownerPressing?->module_subscription_enabled)
+                                <li><a class="dropdown-item" href="{{ route('owner.ui.subscriptions-module') }}">Module abonnements</a></li>
+                            @endif
                             <li><a class="dropdown-item" href="{{ route('owner.ui.invoices') }}">Factures</a></li>
                             <li><a class="dropdown-item" href="{{ route('owner.ui.requests') }}">Demandes employés</a></li>
                             <li><a class="dropdown-item" href="{{ route('owner.ui.transactions') }}">Transactions</a></li>
@@ -112,6 +115,9 @@
 
                 @if(auth()->user()->role === \App\Models\User::ROLE_EMPLOYEE)
                     <li class="nav-item"><a class="nav-link {{ request()->routeIs('employee.ui.orders*') ? 'active fw-semibold' : '' }}" href="{{ route('employee.ui.orders') }}">Mes commandes</a></li>
+                    @if(auth()->user()->pressing?->module_subscription_enabled)
+                        <li class="nav-item"><a class="nav-link {{ request()->routeIs('employee.ui.subscription-orders*') ? 'active fw-semibold' : '' }}" href="{{ route('employee.ui.subscription-orders') }}">Commandes abonnement</a></li>
+                    @endif
                     <li class="nav-item"><a class="nav-link {{ request()->routeIs('employee.ui.invoices*') ? 'active fw-semibold' : '' }}" href="{{ route('employee.ui.invoices') }}">Mes factures</a></li>
                     <li class="nav-item"><a class="nav-link {{ request()->routeIs('employee.ui.requests*') ? 'active fw-semibold' : '' }}" href="{{ route('employee.ui.requests') }}">Demandes</a></li>
                     <li class="nav-item dropdown">

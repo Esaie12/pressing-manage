@@ -13,6 +13,7 @@ class DatabaseSeeder extends Seeder
             SubscriptionPlanSeeder::class,
             OrderStatusSeeder::class,
             CategoryExpenseSeeder::class,
+            SubscriptionContractStatusSeeder::class,
             PressingDemoSeeder::class,
         ]);
     }

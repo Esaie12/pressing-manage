@@ -18,6 +18,7 @@
       <a href="{{ route('owner.ui.stocks', ['section' => 'articles']) }}" class="list-group-item list-group-item-action {{ $section === 'articles' ? 'active' : '' }}">Articles</a>
       <a href="{{ route('owner.ui.stocks', ['section' => 'mouvements']) }}" class="list-group-item list-group-item-action {{ $section === 'mouvements' ? 'active' : '' }}">Mouvements</a>
       <a href="{{ route('owner.ui.stocks', ['section' => 'stock']) }}" class="list-group-item list-group-item-action {{ $section === 'stock' ? 'active' : '' }}">Stock</a>
+      <a href="{{ route('owner.ui.stocks', ['section' => 'fournisseurs']) }}" class="list-group-item list-group-item-action {{ $section === 'fournisseurs' ? 'active' : '' }}">Fournisseurs</a>
       <div class="list-group-item">
         <div class="small text-muted mb-1">Filtre emplacement</div>
         <form method="GET">
@@ -46,6 +47,7 @@
             <div class="col-md-3"><label class="form-label">SKU</label><input class="form-control" name="sku"></div>
             <div class="col-md-3"><label class="form-label">Unité</label><select class="form-select" name="unit" required>@foreach(['unité','kg','litre','ml','paquet','carton','mètre'] as $unit)<option value="{{ $unit }}">{{ $unit }}</option>@endforeach</select></div>
             <div class="col-md-2"><label class="form-label">Alerte</label><input type="number" step="0.01" min="0" class="form-control" name="alert_quantity" value="0"></div>
+            <div class="col-12"><label class="form-label">Fournisseurs (optionnel)</label><select class="form-select js-select2" name="supplier_ids[]" multiple>@foreach($suppliers as $supplier)<option value="{{ $supplier->id }}">{{ $supplier->name }}</option>@endforeach</select></div>
             <div class="col-12"><button class="btn btn-primary">Ajouter</button></div>
           </form>
         </div>
@@ -55,7 +57,7 @@
         <div class="card-header">Liste des articles</div>
         <div class="table-responsive">
           <table class="table mb-0 align-middle">
-            <thead><tr><th>Nom</th><th>SKU</th><th>Unité</th><th>Seuil alerte</th><th>Statut</th><th></th></tr></thead>
+            <thead><tr><th>Nom</th><th>SKU</th><th>Unité</th><th>Fournisseurs</th><th>Seuil alerte</th><th>Statut</th><th></th></tr></thead>
             <tbody>
             @forelse($items as $item)
               <tr>
@@ -71,6 +73,7 @@
                 </td>
                 <td>{{ $item->sku ?: '-' }}</td>
                 <td>{{ $item->unit }}</td>
+                <td>{{ $item->suppliers->pluck('name')->join(', ') ?: '-' }}</td>
                 <td>{{ number_format((float)($pressing->stock_mode === 'central' ? ($item->alert_quantity_central ?? 0) : ($item->alert_quantity_agency ?? 0)),2,',',' ') }}</td>
                 <td>{!! $item->is_active ? '<span class="badge text-bg-success">Actif</span>' : '<span class="badge text-bg-secondary">Inactif</span>' !!}</td>
                 <td class="text-end">
@@ -78,7 +81,7 @@
                 </td>
               </tr>
             @empty
-              <tr><td colspan="6" class="text-center text-muted py-3">Aucun article.</td></tr>
+              <tr><td colspan="7" class="text-center text-muted py-3">Aucun article.</td></tr>
             @endforelse
             </tbody>
           </table>
@@ -148,6 +151,63 @@
         </div>
       </div>
     @endif
+
+
+    @if($section === 'fournisseurs')
+      <div class="card shadow-sm mb-3">
+        <div class="card-header">Nouveau fournisseur</div>
+        <div class="card-body">
+          <form method="POST" action="{{ route('owner.ui.stocks.suppliers.store') }}" class="row g-2">
+            @csrf
+            <div class="col-md-4"><label class="form-label">Nom</label><input class="form-control" name="name" required></div>
+            <div class="col-md-3"><label class="form-label">Téléphone</label><input class="form-control" name="phone"></div>
+            <div class="col-md-3"><label class="form-label">Email</label><input class="form-control" type="email" name="email"></div>
+            <div class="col-md-2"><label class="form-label">Adresse</label><input class="form-control" name="address"></div>
+            <div class="col-12"><button class="btn btn-primary">Ajouter fournisseur</button></div>
+          </form>
+        </div>
+      </div>
+      <div class="card shadow-sm">
+        <div class="card-header">Liste fournisseurs</div>
+        <div class="table-responsive">
+          <table class="table mb-0 align-middle">
+            <thead><tr><th>Nom</th><th>Téléphone</th><th>Email</th><th>Articles liés</th><th>Actions</th></tr></thead>
+            <tbody>
+            @forelse($suppliers as $supplier)
+              <tr>
+                <td>{{ $supplier->name }}</td>
+                <td>{{ $supplier->phone ?: '-' }}</td>
+                <td>{{ $supplier->email ?: '-' }}</td>
+                <td>{{ $supplier->items->pluck('name')->join(', ') ?: '-' }}</td>
+                <td class="d-flex gap-2">
+                  <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editSupplier{{ $supplier->id }}">Modifier</button>
+                  <form method="POST" action="{{ route('owner.ui.stocks.suppliers.delete', $supplier) }}" onsubmit="return confirm('Supprimer ce fournisseur ?')">@csrf<button class="btn btn-sm btn-outline-danger">Supprimer</button></form>
+                </td>
+              </tr>
+            @empty
+              <tr><td colspan="5" class="text-center text-muted py-3">Aucun fournisseur.</td></tr>
+            @endforelse
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      @foreach($suppliers as $supplier)
+        <div class="modal fade" id="editSupplier{{ $supplier->id }}" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Modifier fournisseur</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+          <div class="modal-body">
+            <form method="POST" action="{{ route('owner.ui.stocks.suppliers.update', $supplier) }}" class="vstack gap-2">@csrf
+              <input class="form-control" name="name" value="{{ $supplier->name }}" required>
+              <input class="form-control" name="phone" value="{{ $supplier->phone }}" placeholder="Téléphone">
+              <input class="form-control" type="email" name="email" value="{{ $supplier->email }}" placeholder="Email">
+              <input class="form-control" name="address" value="{{ $supplier->address }}" placeholder="Adresse">
+              <button class="btn btn-primary">Enregistrer</button>
+            </form>
+          </div></div></div>
+        </div>
+      @endforeach
+    @endif
+
   </div>
 </div>
 @endsection

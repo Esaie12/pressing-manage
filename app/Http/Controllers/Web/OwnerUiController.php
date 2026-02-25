@@ -25,6 +25,7 @@ use App\Models\Service;
 use App\Models\StockMovement;
 use App\Models\StockItem;
 use App\Models\StockBalance;
+use App\Models\Supplier;
 use App\Models\SubscriptionPlan;
 use App\Models\Transaction;
 use App\Models\User;
@@ -104,6 +105,22 @@ class OwnerUiController extends Controller
     }
 
 
+
+    public function toggleSubscriptionModule()
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+
+        if (! $this->planAllows($pressing->id, 'allow_subscription_module')) {
+            return redirect()->route('owner.ui.dashboard')->with('error', 'Votre pack ne permet pas le module Abonnements clients.');
+        }
+
+        $pressing->update(['module_subscription_enabled' => ! $pressing->module_subscription_enabled]);
+
+        return redirect()->route('owner.ui.dashboard')->with('success', $pressing->module_subscription_enabled
+            ? 'Module Abonnements clients activé.'
+            : 'Module Abonnements clients désactivé.');
+    }
+
     public function toggleStockModule(Request $request)
     {
         $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
@@ -141,7 +158,8 @@ class OwnerUiController extends Controller
         $scope = $request->query('scope', 'all');
 
         $agencies = Agency::where('pressing_id', $pressing->id)->orderBy('name')->get();
-        $items = StockItem::where('pressing_id', $pressing->id)->orderBy('name')->get();
+        $items = StockItem::where('pressing_id', $pressing->id)->with('suppliers')->orderBy('name')->get();
+        $suppliers = Supplier::where('pressing_id', $pressing->id)->with('items')->orderBy('name')->get();
 
         $movements = StockMovement::where('pressing_id', $pressing->id)
             ->with(['item', 'user', 'agency', 'sourceAgency', 'targetAgency'])
@@ -183,10 +201,11 @@ class OwnerUiController extends Controller
             'agencies' => $agencies,
             'items' => $items,
             'activeItems' => $items->where('is_active', true)->values(),
+            'suppliers' => $suppliers,
             'movements' => $movements,
             'balances' => $balances,
             'selectedDate' => $date,
-            'section' => in_array($section, ['articles', 'mouvements', 'stock'], true) ? $section : 'articles',
+            'section' => in_array($section, ['articles', 'mouvements', 'stock', 'fournisseurs'], true) ? $section : 'articles',
             'scope' => $scope,
             'canEditWindowMinutes' => 180,
             'totalArticles' => $totalArticles,
@@ -205,9 +224,11 @@ class OwnerUiController extends Controller
             'sku' => ['nullable', 'string', 'max:80'],
             'unit' => ['required', 'in:unité,kg,litre,ml,paquet,carton,mètre'],
             'alert_quantity' => ['nullable', 'numeric', 'min:0'],
+            'supplier_ids' => ['nullable', 'array'],
+            'supplier_ids.*' => ['integer', 'exists:suppliers,id'],
         ]);
 
-        StockItem::create([
+        $item = StockItem::create([
             'pressing_id' => $pressing->id,
             'name' => $data['name'],
             'sku' => $data['sku'] ?? null,
@@ -216,6 +237,9 @@ class OwnerUiController extends Controller
             'alert_quantity_agency' => $pressing->stock_mode === 'agency' ? (float) ($data['alert_quantity'] ?? 0) : null,
             'is_active' => true,
         ]);
+
+        $supplierIds = Supplier::where('pressing_id', $pressing->id)->whereIn('id', $data['supplier_ids'] ?? [])->pluck('id')->all();
+        $item->suppliers()->sync($supplierIds);
 
         return redirect()->route('owner.ui.stocks', ['section' => 'articles'])->with('success', 'Article de stock ajouté.');
     }
@@ -230,6 +254,8 @@ class OwnerUiController extends Controller
             'sku' => ['nullable', 'string', 'max:80'],
             'unit' => ['required', 'in:unité,kg,litre,ml,paquet,carton,mètre'],
             'alert_quantity' => ['nullable', 'numeric', 'min:0'],
+            'supplier_ids' => ['nullable', 'array'],
+            'supplier_ids.*' => ['integer', 'exists:suppliers,id'],
         ]);
 
         $stockItem->update([
@@ -239,6 +265,9 @@ class OwnerUiController extends Controller
             'alert_quantity_central' => $pressing->stock_mode === 'central' ? (float) ($data['alert_quantity'] ?? 0) : $stockItem->alert_quantity_central,
             'alert_quantity_agency' => $pressing->stock_mode === 'agency' ? (float) ($data['alert_quantity'] ?? 0) : $stockItem->alert_quantity_agency,
         ]);
+
+        $supplierIds = Supplier::where('pressing_id', $pressing->id)->whereIn('id', $data['supplier_ids'] ?? [])->pluck('id')->all();
+        $stockItem->suppliers()->sync($supplierIds);
 
         return redirect()->route('owner.ui.stocks', ['section' => 'articles'])->with('success', 'Article de stock modifié.');
     }
@@ -261,6 +290,52 @@ class OwnerUiController extends Controller
         $stockItem->delete();
 
         return redirect()->route('owner.ui.stocks', ['section' => 'articles'])->with('success', 'Article supprimé.');
+    }
+
+
+    public function storeSupplier(Request $request)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if(! $pressing->module_stock_enabled, 403, 'Module Stock non activé.');
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'phone' => ['nullable', 'string', 'max:50'],
+            'email' => ['nullable', 'email', 'max:120'],
+            'address' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        Supplier::create($data + ['pressing_id' => $pressing->id, 'is_active' => true]);
+
+        return redirect()->route('owner.ui.stocks', ['section' => 'fournisseurs'])->with('success', 'Fournisseur ajouté.');
+    }
+
+    public function updateSupplier(Request $request, Supplier $supplier)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if($supplier->pressing_id !== $pressing->id, 403);
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'phone' => ['nullable', 'string', 'max:50'],
+            'email' => ['nullable', 'email', 'max:120'],
+            'address' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $supplier->update($data);
+
+        return redirect()->route('owner.ui.stocks', ['section' => 'fournisseurs'])->with('success', 'Fournisseur modifié.');
+    }
+
+    public function destroySupplier(Supplier $supplier)
+    {
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        abort_if($supplier->pressing_id !== $pressing->id, 403);
+
+        $supplier->items()->detach();
+        $supplier->delete();
+
+        return redirect()->route('owner.ui.stocks', ['section' => 'fournisseurs'])->with('success', 'Fournisseur supprimé.');
     }
 
     public function storeStockMovement(Request $request)
@@ -1271,6 +1346,9 @@ class OwnerUiController extends Controller
         if ($pressing->module_stock_enabled && ! $plan->allow_stock_module) {
             return redirect()->route('owner.ui.pricing')->with('error', 'Désactivez le module Stock avant de prendre ce pack.');
         }
+        if ($pressing->module_subscription_enabled && ! $plan->allow_subscription_module) {
+            return redirect()->route('owner.ui.pricing')->with('error', 'Désactivez le module Abonnements clients avant de prendre ce pack.');
+        }
 
         OwnerSubscription::where('pressing_id', Auth::user()->pressing_id)->where('is_active', true)->update(['is_active' => false]);
 
@@ -1295,6 +1373,7 @@ class OwnerUiController extends Controller
             'want_accounting_module' => ['nullable', 'boolean'],
             'want_cash_closure_module' => ['nullable', 'boolean'],
             'want_customization' => ['nullable', 'boolean'],
+            'want_subscription_module' => ['nullable', 'boolean'],
             'note' => ['nullable', 'string', 'max:2000'],
             'billing_cycle' => ['required', 'in:monthly,annual'],
         ]);
@@ -1313,6 +1392,7 @@ class OwnerUiController extends Controller
         $wantAccounting = (bool) ($data['want_accounting_module'] ?? false);
         $wantCash = (bool) ($data['want_cash_closure_module'] ?? false);
         $wantCustom = (bool) ($data['want_customization'] ?? false);
+        $wantSubscription = (bool) ($data['want_subscription_module'] ?? false);
 
         if ($wantStock) {
             $estimated += (float) $pricing->price_module_stock;
@@ -1352,6 +1432,7 @@ class OwnerUiController extends Controller
             'allow_cash_closure_module' => $wantCash,
             'allow_accounting_module' => $wantAccounting,
             'allow_stock_module' => $wantStock,
+            'allow_subscription_module' => $wantSubscription,
             'is_custom' => true,
             'pressing_id' => $pressingId,
         ]);
