@@ -57,10 +57,11 @@
 
   <div class="col-lg-7">
     <div class="card"><div class="card-header">Liste des commandes</div><div class="table-responsive">
+      @if(count($orders)>0)
       <table class="table mb-0 datatable align-middle">
         <thead><tr><th>Référence</th><th>Client</th><th>Total</th><th>Avance</th><th>Reste</th><th>Statut</th><th>Actions</th></tr></thead>
         <tbody>
-        @forelse($orders as $order)
+        @foreach($orders as $order)
           @php $remaining=max(0,(float)$order->total-(float)$order->advance_amount); $status=$statusMap[$order->status] ?? null; @endphp
           <tr>
             <td>{{ $order->reference }}</td>
@@ -83,11 +84,14 @@
               @endif
             </td>
           </tr>
-        @empty
-          <tr><td colspan="7" class="text-center text-muted">Aucune commande</td></tr>
-        @endforelse
+        @endforeach
         </tbody>
       </table>
+      @else 
+      <div class="text-center py-4 text-danger">
+        Aucune commande
+      </div>
+      @endif
     </div></div>
   </div>
 </div>

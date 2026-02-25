@@ -27,10 +27,11 @@
     <div class="card">
       <div class="card-header">Services du pressing</div>
       <div class="table-responsive">
+        @if(count($services) >0)
         <table class="table mb-0 datatable align-middle">
           <thead><tr><th>Service</th><th>Agence</th><th>Prix</th><th>Statut</th><th>Actions</th></tr></thead>
           <tbody>
-            @forelse($services as $service)
+            @foreach($services as $service)
               <tr>
                 <td>{{ $service->name }} @if($service->deleted_at)<span class="badge bg-danger">Supprimé</span>@endif</td>
                 <td>{{ $service->agency?->name ?? '-' }}</td>
@@ -46,11 +47,14 @@
                   @endif
                 </td>
               </tr>
-            @empty
-              <tr><td colspan="5" class="text-center text-muted">Aucun service</td></tr>
-            @endforelse
+            @endforeach
           </tbody>
         </table>
+        @else 
+        <div class="text-center py-4 text-danger">
+           Aucun service
+        </div>
+        @endif
       </div>
     </div>
   </div>

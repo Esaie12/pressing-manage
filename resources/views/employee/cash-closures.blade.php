@@ -25,10 +25,11 @@
 <div class="card shadow-sm">
   <div class="card-header">Mes clôtures</div>
   <div class="table-responsive">
+    @if(count($closures)>0)
     <table class="table datatable mb-0 align-middle">
       <thead><tr><th>Date</th><th>Encaissements</th><th>Paiements</th><th>Net</th><th>Transactions</th><th>Action</th></tr></thead>
       <tbody>
-      @forelse($closures as $closure)
+      @foreach($closures as $closure)
         <tr>
           <td>{{ $closure->closure_date?->format('d/m/Y') }} <small class="text-muted">{{ $closure->closed_at?->format('H:i') }}</small></td>
           <td>{{ number_format($closure->encaissement_total,0,',',' ') }} FCFA</td>
@@ -37,11 +38,14 @@
           <td>{{ $closure->transactions_count }}</td>
           <td><a class="btn btn-sm btn-outline-primary" href="{{ route('employee.ui.cash-closures.show', $closure) }}">Détails</a></td>
         </tr>
-      @empty
-        <tr><td colspan="6" class="text-center text-muted">Aucune clôture</td></tr>
-      @endforelse
+      @endforeach
       </tbody>
     </table>
+     @else 
+            <div class="text-center py-4 text-danger">
+              Aucune clôture
+            </div>
+            @endif
   </div>
 </div>
 @endsection

@@ -14,6 +14,9 @@ use App\Models\OrderStatus;
 use App\Models\OrderItem;
 use App\Models\Pressing;
 use App\Models\Service;
+use App\Models\StockBalance;
+use App\Models\StockItem;
+use App\Models\StockMovement;
 use App\Models\User;
 use App\Models\UserNotification;
 use App\Models\Transaction;
@@ -183,6 +186,99 @@ class EmployeeUiController extends Controller
 
         return view('employee.cash-closure-show', ['closure' => $cashClosure]);
     }
+
+
+    public function stockDailyReport(Request $request)
+    {
+        $employee = Auth::user();
+        abort_unless($employee->is_active, 403);
+        abort_if(! $employee->pressing?->module_stock_enabled, 403, 'Module Stock non activé.');
+
+        $date = $request->query('movement_date', now()->toDateString());
+        $section = $request->query('section', 'stock');
+
+        $outgoing = StockMovement::where('pressing_id', $employee->pressing_id)
+            ->where('user_id', $employee->id)
+            ->whereDate('movement_date', $date)
+            ->whereIn('movement_type', ['sortie', 'perte_casse'])
+            ->with(['item', 'agency'])
+            ->latest('created_at')
+            ->get();
+
+        $agencyBalances = StockBalance::where('pressing_id', $employee->pressing_id)
+            ->where('agency_id', $employee->agency_id)
+            ->with('item')
+            ->orderBy('stock_item_id')
+            ->get();
+
+        $items = StockItem::where('pressing_id', $employee->pressing_id)->where('is_active', true)->orderBy('name')->get();
+        $totalArticles = $items->count();
+        $inStockArticles = $agencyBalances->where('quantity', '>', 0)->pluck('stock_item_id')->unique()->count();
+
+        return view('employee.stock-daily', [
+            'movementDate' => $date,
+            'outgoing' => $outgoing,
+            'totalOutgoing' => (float) $outgoing->sum('quantity'),
+            'items' => $items,
+            'agencyBalances' => $agencyBalances,
+            'stockMode' => $employee->pressing->stock_mode,
+            'employeeAgencyId' => $employee->agency_id,
+            'section' => in_array($section, ['stock', 'sortie'], true) ? $section : 'stock',
+            'totalArticles' => $totalArticles,
+            'inStockArticles' => $inStockArticles,
+            'outOfStockArticles' => max($totalArticles - $inStockArticles, 0),
+        ]);
+    }
+
+    public function storeStockOutgoing(Request $request)
+    {
+        $employee = Auth::user();
+        abort_unless($employee->is_active, 403);
+        abort_if(! $employee->pressing?->module_stock_enabled, 403, 'Module Stock non activé.');
+
+        $data = $request->validate([
+            'stock_item_id' => ['required', 'exists:stock_items,id'],
+            'quantity' => ['required', 'numeric', 'gt:0'],
+            'movement_date' => ['required', 'date'],
+            'note' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $item = StockItem::where('id', $data['stock_item_id'])
+            ->where('pressing_id', $employee->pressing_id)
+            ->where('is_active', true)
+            ->firstOrFail();
+
+        DB::transaction(function () use ($employee, $item, $data) {
+            $balance = StockBalance::firstOrCreate(
+                [
+                    'pressing_id' => $employee->pressing_id,
+                    'stock_item_id' => $item->id,
+                    'agency_id' => $employee->agency_id,
+                ],
+                ['quantity' => 0]
+            );
+
+            $next = (float) $balance->quantity - (float) $data['quantity'];
+            abort_if($next < 0, 422, 'Stock insuffisant dans votre agence.');
+
+            $balance->update(['quantity' => $next]);
+
+            StockMovement::create([
+                'pressing_id' => $employee->pressing_id,
+                'stock_item_id' => $item->id,
+                'user_id' => $employee->id,
+                'agency_id' => $employee->agency_id,
+                'movement_type' => 'sortie',
+                'quantity' => (float) $data['quantity'],
+                'movement_date' => $data['movement_date'],
+                'note' => $data['note'] ?? null,
+            ]);
+        });
+
+        return redirect()->route('employee.ui.stock.daily', ['movement_date' => $data['movement_date'], 'section' => 'sortie'])->with('success', 'Sortie enregistrée.');
+    }
+
+    
 
     public function requests()
     {

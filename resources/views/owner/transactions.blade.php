@@ -5,10 +5,11 @@
 <div class="card shadow-sm">
   <div class="card-header">Transactions reçues</div>
   <div class="table-responsive">
+    @if(count($transactions) >0)
     <table class="table datatable mb-0 align-middle">
       <thead><tr><th>Date</th><th>Type</th><th>Montant</th><th>Agence</th><th>Référence</th><th>Auteur</th><th>Statut</th><th>Action</th></tr></thead>
       <tbody>
-      @forelse($transactions as $tx)
+      @foreach($transactions as $tx)
         @php
           $window = (int) ($pressing->transaction_cancellation_window_minutes ?? 0);
           $deadline = optional($tx->happened_at ?? $tx->created_at)?->copy()?->addMinutes($window);
@@ -38,11 +39,14 @@
             @endif
           </td>
         </tr>
-      @empty
-        <tr><td colspan="8" class="text-center text-muted">Aucune transaction</td></tr>
-      @endforelse
+      @endforeach
       </tbody>
     </table>
+     @else 
+    <div class="text-center py-4 text-danger">
+                Aucune transaction
+              </div>
+    @endif
   </div>
 </div>
 @endsection

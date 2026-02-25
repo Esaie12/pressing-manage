@@ -12,12 +12,17 @@ class Pressing extends Model
         'allow_transaction_cancellation', 'transaction_cancellation_window_minutes',
         'module_cash_closure_enabled',
         'module_accounting_enabled',
+        'module_stock_enabled',
+        'module_subscription_enabled',
+        'stock_mode',
     ];
 
     protected $casts = [
         'allow_transaction_cancellation' => 'boolean',
         'module_cash_closure_enabled' => 'boolean',
         'module_accounting_enabled' => 'boolean',
+        'module_stock_enabled' => 'boolean',
+        'module_subscription_enabled' => 'boolean',
     ];
 
     public function owner()

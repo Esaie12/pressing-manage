@@ -11,6 +11,8 @@ use App\Http\Controllers\Web\AdminUiController;
 use App\Http\Controllers\Web\EmployeeUiController;
 use App\Http\Controllers\Web\NotificationUiController;
 use App\Http\Controllers\Web\OwnerUiController;
+use App\Http\Controllers\Web\SubscriptionModuleUiController;
+use App\Http\Controllers\Web\EmployeeSubscriptionModuleUiController;
 use App\Http\Controllers\Web\ProfileUiController;
 use App\Http\Middleware\RoleMiddleware;
 use Illuminate\Support\Facades\Route;
@@ -51,6 +53,7 @@ Route::middleware(['auth', RoleMiddleware::class.':admin'])->prefix('admin')->gr
     Route::get('/ui/pricing', [AdminUiController::class, 'pricing'])->name('admin.ui.pricing');
     Route::post('/ui/pricing', [AdminUiController::class, 'storePlan'])->name('admin.ui.pricing.store');
     Route::post('/ui/pricing/{plan}', [AdminUiController::class, 'updatePlan'])->name('admin.ui.pricing.update');
+    Route::post('/ui/pricing/custom-pack', [AdminUiController::class, 'saveCustomPackPricing'])->name('admin.ui.pricing.custom-pack.save');
 });
 
 Route::middleware(['auth', RoleMiddleware::class.':owner'])->prefix('owner')->group(function () {
@@ -67,6 +70,8 @@ Route::middleware(['auth', RoleMiddleware::class.':owner'])->prefix('owner')->gr
     Route::get('/ui/dashboard', [OwnerUiController::class, 'dashboard'])->name('owner.ui.dashboard');
     Route::post('/ui/modules/cash-closure/toggle', [OwnerUiController::class, 'toggleCashClosureModule'])->name('owner.ui.modules.cash-closure.toggle');
     Route::post('/ui/modules/accounting/toggle', [OwnerUiController::class, 'toggleAccountingModule'])->name('owner.ui.modules.accounting.toggle');
+    Route::post('/ui/modules/stock/toggle', [OwnerUiController::class, 'toggleStockModule'])->name('owner.ui.modules.stock.toggle');
+    Route::post('/ui/modules/subscriptions/toggle', [OwnerUiController::class, 'toggleSubscriptionModule'])->name('owner.ui.modules.subscriptions.toggle');
     Route::get('/ui/agencies', [OwnerUiController::class, 'agencies'])->name('owner.ui.agencies');
     Route::post('/ui/agencies', [OwnerUiController::class, 'storeAgency'])->name('owner.ui.agencies.store');
     Route::post('/ui/agencies/{agency}/toggle', [OwnerUiController::class, 'toggleAgency'])->name('owner.ui.agencies.toggle');
@@ -113,13 +118,36 @@ Route::middleware(['auth', RoleMiddleware::class.':owner'])->prefix('owner')->gr
     Route::post('/ui/cash-closures', [OwnerUiController::class, 'storeCashClosure'])->name('owner.ui.cash-closures.store');
     Route::get('/ui/cash-closures/{cashClosure}', [OwnerUiController::class, 'showCashClosure'])->name('owner.ui.cash-closures.show');
 
+    Route::get('/ui/stocks', [OwnerUiController::class, 'stocks'])->name('owner.ui.stocks');
+    Route::post('/ui/stocks/items', [OwnerUiController::class, 'storeStockItem'])->name('owner.ui.stocks.items.store');
+    Route::post('/ui/stocks/items/{stockItem}', [OwnerUiController::class, 'updateStockItem'])->name('owner.ui.stocks.items.update');
+    Route::post('/ui/stocks/items/{stockItem}/delete', [OwnerUiController::class, 'destroyStockItem'])->name('owner.ui.stocks.items.delete');
+    Route::post('/ui/stocks/movements', [OwnerUiController::class, 'storeStockMovement'])->name('owner.ui.stocks.movements.store');
+    Route::get('/ui/stocks/movements/{stockMovement}/edit', [OwnerUiController::class, 'editStockMovement'])->name('owner.ui.stocks.movements.edit');
+    Route::post('/ui/stocks/movements/{stockMovement}', [OwnerUiController::class, 'updateStockMovement'])->name('owner.ui.stocks.movements.update');
+    Route::post('/ui/stocks/movements/{stockMovement}/delete', [OwnerUiController::class, 'destroyStockMovement'])->name('owner.ui.stocks.movements.delete');
+    Route::post('/ui/stocks/suppliers', [OwnerUiController::class, 'storeSupplier'])->name('owner.ui.stocks.suppliers.store');
+    Route::post('/ui/stocks/suppliers/{supplier}', [OwnerUiController::class, 'updateSupplier'])->name('owner.ui.stocks.suppliers.update');
+    Route::post('/ui/stocks/suppliers/{supplier}/delete', [OwnerUiController::class, 'destroySupplier'])->name('owner.ui.stocks.suppliers.delete');
+
     Route::get('/ui/pricing', [OwnerUiController::class, 'pricing'])->name('owner.ui.pricing');
     Route::post('/ui/pricing/subscribe', [OwnerUiController::class, 'subscribePlan'])->name('owner.ui.pricing.subscribe');
+    Route::post('/ui/pricing/custom-request', [OwnerUiController::class, 'storeCustomPackRequest'])->name('owner.ui.pricing.custom-request.store');
 
     Route::get('/ui/accounting/settings', [OwnerUiController::class, 'accountingSettings'])->name('owner.ui.accounting.settings');
     Route::post('/ui/accounting/settings', [OwnerUiController::class, 'saveAccountingSettings'])->name('owner.ui.accounting.settings.save');
     Route::get('/ui/accounting/reports', [OwnerUiController::class, 'accountingReports'])->name('owner.ui.accounting.reports');
     Route::post('/ui/accounting/reports', [OwnerUiController::class, 'saveAccountingReport'])->name('owner.ui.accounting.reports.save');
+    Route::get('/ui/subscriptions-module', [SubscriptionModuleUiController::class, 'index'])->name('owner.ui.subscriptions-module');
+    Route::post('/ui/subscriptions-module/clients', [SubscriptionModuleUiController::class, 'storeClient'])->name('owner.ui.subscriptions-module.clients.store');
+    Route::post('/ui/subscriptions-module/clients/{client}', [SubscriptionModuleUiController::class, 'updateClient'])->name('owner.ui.subscriptions-module.clients.update');
+    Route::post('/ui/subscriptions-module/clients/{client}/delete', [SubscriptionModuleUiController::class, 'destroyClient'])->name('owner.ui.subscriptions-module.clients.delete');
+    Route::post('/ui/subscriptions-module/contracts', [SubscriptionModuleUiController::class, 'storeContract'])->name('owner.ui.subscriptions-module.contracts.store');
+    Route::post('/ui/subscriptions-module/contracts/{contract}', [SubscriptionModuleUiController::class, 'updateContract'])->name('owner.ui.subscriptions-module.contracts.update');
+    Route::post('/ui/subscriptions-module/orders', [SubscriptionModuleUiController::class, 'storeOrder'])->name('owner.ui.subscriptions-module.orders.store');
+    Route::post('/ui/subscriptions-module/orders/{order}/ready', [SubscriptionModuleUiController::class, 'markOrderReady'])->name('owner.ui.subscriptions-module.orders.ready');
+    Route::post('/ui/subscriptions-module/orders/{order}/delivered', [SubscriptionModuleUiController::class, 'markOrderDelivered'])->name('owner.ui.subscriptions-module.orders.delivered');
+
     Route::get('/ui/accounting/reports/{report}', [OwnerUiController::class, 'showAccountingReport'])->name('owner.ui.accounting.reports.show');
 });
 
@@ -145,10 +173,17 @@ Route::middleware(['auth', RoleMiddleware::class.':employee'])->prefix('employee
 
     Route::get('/ui/invoices', [EmployeeUiController::class, 'invoices'])->name('employee.ui.invoices');
     Route::get('/ui/transactions', [EmployeeUiController::class, 'transactions'])->name('employee.ui.transactions');
+    Route::get('/ui/stock/daily', [EmployeeUiController::class, 'stockDailyReport'])->name('employee.ui.stock.daily');
+    Route::post('/ui/stock/daily/outgoing', [EmployeeUiController::class, 'storeStockOutgoing'])->name('employee.ui.stock.daily.outgoing.store');
     Route::get('/ui/cash-closures', [EmployeeUiController::class, 'cashClosures'])->name('employee.ui.cash-closures');
     Route::post('/ui/cash-closures', [EmployeeUiController::class, 'storeCashClosure'])->name('employee.ui.cash-closures.store');
     Route::get('/ui/cash-closures/{cashClosure}', [EmployeeUiController::class, 'showCashClosure'])->name('employee.ui.cash-closures.show');
     Route::post('/ui/transactions/{transaction}/cancel', [EmployeeUiController::class, 'cancelTransaction'])->name('employee.ui.transactions.cancel');
     Route::get('/ui/invoices/{invoice}', [EmployeeUiController::class, 'showInvoice'])->name('employee.ui.invoices.show');
+    Route::get('/ui/subscription-orders', [EmployeeSubscriptionModuleUiController::class, 'index'])->name('employee.ui.subscription-orders');
+    Route::post('/ui/subscription-orders', [EmployeeSubscriptionModuleUiController::class, 'store'])->name('employee.ui.subscription-orders.store');
+    Route::post('/ui/subscription-orders/{order}/ready', [EmployeeSubscriptionModuleUiController::class, 'markReady'])->name('employee.ui.subscription-orders.ready');
+    Route::post('/ui/subscription-orders/{order}/delivered', [EmployeeSubscriptionModuleUiController::class, 'markDelivered'])->name('employee.ui.subscription-orders.delivered');
+
     Route::post('/ui/invoices/{invoice}/delete', [EmployeeUiController::class, 'destroyInvoice'])->name('employee.ui.invoices.delete');
 });
