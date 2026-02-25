@@ -5,11 +5,11 @@
 <div class="row g-3">
   <div class="col-lg-3">
     <div class="list-group shadow-sm cms-menu" id="cmsMenu">
-      <a href="#general" class="list-group-item list-group-item-action">Paramètres généraux</a>
-      <a href="#template" class="list-group-item list-group-item-action">Choix du template</a>
-      <a href="#sections" class="list-group-item list-group-item-action">Sections</a>
-      <a href="#seo" class="list-group-item list-group-item-action">SEO</a>
-      <a href="#publication" class="list-group-item list-group-item-action">Publication</a>
+      <a href="{{ route('owner.ui.landing.tab', ['tab' => 'general']) }}" class="list-group-item list-group-item-action {{ $activeTab === 'general' ? 'active' : '' }}">Paramètres généraux</a>
+      <a href="{{ route('owner.ui.landing.tab', ['tab' => 'template']) }}" class="list-group-item list-group-item-action {{ $activeTab === 'template' ? 'active' : '' }}">Choix du template</a>
+      <a href="{{ route('owner.ui.landing.tab', ['tab' => 'sections']) }}" class="list-group-item list-group-item-action {{ $activeTab === 'sections' ? 'active' : '' }}">Sections</a>
+      <a href="{{ route('owner.ui.landing.tab', ['tab' => 'seo']) }}" class="list-group-item list-group-item-action {{ $activeTab === 'seo' ? 'active' : '' }}">SEO</a>
+      <a href="{{ route('owner.ui.landing.tab', ['tab' => 'publication']) }}" class="list-group-item list-group-item-action {{ $activeTab === 'publication' ? 'active' : '' }}">Publication</a>
     </div>
     <div class="card shadow-sm mt-3">
       <div class="card-body small">
@@ -20,10 +20,10 @@
   </div>
 
   <div class="col-lg-9">
-    <form method="POST" action="{{ route('owner.ui.landing.settings.update') }}" class="vstack gap-3">
-      @csrf
-
-      <div class="card shadow-sm" id="general">
+    @if($activeTab === 'general')
+      <form method="POST" action="{{ route('owner.ui.landing.settings.update') }}" class="card shadow-sm">
+        @csrf
+        <input type="hidden" name="form_section" value="general">
         <div class="card-header">Paramètres généraux</div>
         <div class="card-body row g-3">
           <div class="col-md-6"><label class="form-label">Nom du pressing</label><input class="form-control" name="name" value="{{ old('name', $landing->name) }}" required></div>
@@ -32,9 +32,12 @@
           <div class="col-md-6"><label class="form-label">WhatsApp</label><input class="form-control" name="whatsapp_number" value="{{ old('whatsapp_number', $landing->whatsapp_number) }}"></div>
           <div class="col-md-6"><label class="form-label">Email contact</label><input type="email" class="form-control" name="contact_email" value="{{ old('contact_email', $landing->contact_email) }}"></div>
         </div>
-      </div>
-
-      <div class="card shadow-sm" id="template">
+        <div class="card-footer text-end"><button class="btn btn-primary">Enregistrer</button></div>
+      </form>
+    @elseif($activeTab === 'template')
+      <form method="POST" action="{{ route('owner.ui.landing.settings.update') }}" class="card shadow-sm">
+        @csrf
+        <input type="hidden" name="form_section" value="template">
         <div class="card-header">Choix du template</div>
         <div class="card-body row g-3">
           <div class="col-md-6"><label class="form-label">Template</label>
@@ -47,17 +50,23 @@
           <div class="col-md-3"><label class="form-label">Couleur principale</label><input type="color" class="form-control form-control-color" name="primary_color" value="{{ old('primary_color', $landing->primary_color ?? '#0d6efd') }}"></div>
           <div class="col-md-3"><label class="form-label">Couleur secondaire</label><input type="color" class="form-control form-control-color" name="secondary_color" value="{{ old('secondary_color', $landing->secondary_color ?? '#20c997') }}"></div>
         </div>
-      </div>
-
-      <div class="card shadow-sm" id="seo">
+        <div class="card-footer text-end"><button class="btn btn-primary">Enregistrer</button></div>
+      </form>
+    @elseif($activeTab === 'seo')
+      <form method="POST" action="{{ route('owner.ui.landing.settings.update') }}" class="card shadow-sm">
+        @csrf
+        <input type="hidden" name="form_section" value="seo">
         <div class="card-header">SEO</div>
         <div class="card-body row g-3">
           <div class="col-md-6"><label class="form-label">SEO title</label><input class="form-control" name="meta_title" value="{{ old('meta_title', $landing->meta_title) }}"></div>
           <div class="col-md-6"><label class="form-label">SEO description</label><input class="form-control" name="meta_description" value="{{ old('meta_description', $landing->meta_description) }}"></div>
         </div>
-      </div>
-
-      <div class="card shadow-sm" id="publication">
+        <div class="card-footer text-end"><button class="btn btn-primary">Enregistrer</button></div>
+      </form>
+    @elseif($activeTab === 'publication')
+      <form method="POST" action="{{ route('owner.ui.landing.settings.update') }}" class="card shadow-sm">
+        @csrf
+        <input type="hidden" name="form_section" value="publication">
         <div class="card-header">Publication & contenus</div>
         <div class="card-body row g-3">
           <div class="col-md-4"><label class="form-label">Statut</label>
@@ -73,38 +82,37 @@
           <div class="col-md-12"><label class="form-label">Texte À propos</label><textarea class="form-control" rows="3" name="about_body">{{ old('about_body', $landing->about_body) }}</textarea></div>
           <div class="col-md-12"><label class="form-label">Footer</label><input class="form-control" name="footer_text" value="{{ old('footer_text', $landing->footer_text) }}"></div>
         </div>
-      </div>
-
-      <div class="d-flex justify-content-end"><button class="btn btn-primary">Enregistrer</button></div>
-    </form>
-
-    <div class="card shadow-sm mt-3" id="sections">
-      <div class="card-header">Sections visibles et ordre</div>
-      <div class="card-body">
-        <form method="POST" action="{{ route('owner.ui.landing.sections.update') }}" class="row g-2">
-          @csrf
-          @foreach($sections as $index => $section)
-            <input type="hidden" name="sections[{{ $index }}][section_key]" value="{{ $section->section_key }}">
-            <div class="col-md-6">
-              <div class="border rounded p-2 d-flex align-items-center justify-content-between">
-                <div>
-                  <strong>{{ ucfirst($section->section_key) }}</strong>
-                  <div class="small text-muted">Réglez visibilité et position</div>
-                </div>
-                <div class="d-flex gap-2 align-items-center">
-                  <input type="number" min="1" max="20" class="form-control" style="width:80px" name="sections[{{ $index }}][position]" value="{{ $section->position }}">
-                  <div class="form-check form-switch m-0">
-                    <input type="hidden" name="sections[{{ $index }}][is_visible]" value="0">
-                    <input class="form-check-input" type="checkbox" name="sections[{{ $index }}][is_visible]" value="1" @checked($section->is_visible)>
+        <div class="card-footer text-end"><button class="btn btn-primary">Enregistrer</button></div>
+      </form>
+    @else
+      <div class="card shadow-sm" id="sections">
+        <div class="card-header">Sections visibles et ordre</div>
+        <div class="card-body">
+          <form method="POST" action="{{ route('owner.ui.landing.sections.update') }}" class="row g-2">
+            @csrf
+            @foreach($sections as $index => $section)
+              <input type="hidden" name="sections[{{ $index }}][section_key]" value="{{ $section->section_key }}">
+              <div class="col-md-6">
+                <div class="border rounded p-2 d-flex align-items-center justify-content-between">
+                  <div>
+                    <strong>{{ ucfirst($section->section_key) }}</strong>
+                    <div class="small text-muted">Réglez visibilité et position</div>
+                  </div>
+                  <div class="d-flex gap-2 align-items-center">
+                    <input type="number" min="1" max="20" class="form-control" style="width:80px" name="sections[{{ $index }}][position]" value="{{ $section->position }}">
+                    <div class="form-check form-switch m-0">
+                      <input type="hidden" name="sections[{{ $index }}][is_visible]" value="0">
+                      <input class="form-check-input" type="checkbox" name="sections[{{ $index }}][is_visible]" value="1" @checked($section->is_visible)>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          @endforeach
-          <div class="col-12 mt-2"><button class="btn btn-outline-primary">Mettre à jour sections</button></div>
-        </form>
+            @endforeach
+            <div class="col-12 mt-2 text-end"><button class="btn btn-outline-primary">Mettre à jour sections</button></div>
+          </form>
+        </div>
       </div>
-    </div>
+    @endif
   </div>
 </div>
 @endsection

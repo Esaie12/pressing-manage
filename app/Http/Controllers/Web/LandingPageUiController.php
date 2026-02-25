@@ -24,17 +24,21 @@ class LandingPageUiController extends Controller
         'footer',
     ];
 
-    public function index()
+    private array $allowedTabs = ['general', 'template', 'sections', 'seo', 'publication'];
+
+    public function index(Request $request, ?string $tab = null)
     {
         $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
         abort_if(! $pressing->module_landing_enabled, 403, 'Module Landing non activé.');
 
         $landing = $this->getOrCreateLanding($pressing);
+        $activeTab = $tab && in_array($tab, $this->allowedTabs, true) ? $tab : 'general';
 
         return view('owner.landing.index', [
             'pressing' => $pressing,
             'landing' => $landing,
             'sections' => $landing->sections,
+            'activeTab' => $activeTab,
         ]);
     }
 
@@ -62,48 +66,51 @@ class LandingPageUiController extends Controller
         abort_if(! $pressing->module_landing_enabled, 403);
 
         $landing = $this->getOrCreateLanding($pressing);
+        $section = $request->input('form_section', 'general');
 
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'tagline' => ['nullable', 'string', 'max:255'],
-            'primary_color' => ['nullable', 'string', 'max:20'],
-            'secondary_color' => ['nullable', 'string', 'max:20'],
-            'whatsapp_number' => ['nullable', 'string', 'max:30'],
-            'contact_email' => ['nullable', 'email', 'max:255'],
-            'slug' => ['required', 'alpha_dash', 'max:100', 'unique:landings,slug,'.$landing->id],
-            'meta_title' => ['nullable', 'string', 'max:255'],
-            'meta_description' => ['nullable', 'string', 'max:300'],
-            'template_key' => ['required', 'in:minimal_clean,minimal_business,minimal_modern'],
-            'status' => ['required', 'in:draft,published'],
-            'hero_title' => ['nullable', 'string', 'max:255'],
-            'hero_subtitle' => ['nullable', 'string', 'max:255'],
-            'about_title' => ['nullable', 'string', 'max:255'],
-            'about_body' => ['nullable', 'string', 'max:1000'],
-            'contact_title' => ['nullable', 'string', 'max:255'],
-            'footer_text' => ['nullable', 'string', 'max:255'],
-        ]);
+        $rules = match ($section) {
+            'general' => [
+                'name' => ['required', 'string', 'max:255'],
+                'slug' => ['required', 'alpha_dash', 'max:100', 'unique:landings,slug,'.$landing->id],
+                'tagline' => ['nullable', 'string', 'max:255'],
+                'whatsapp_number' => ['nullable', 'string', 'max:30'],
+                'contact_email' => ['nullable', 'email', 'max:255'],
+            ],
+            'template' => [
+                'template_key' => ['required', 'in:minimal_clean,minimal_business,minimal_modern'],
+                'primary_color' => ['nullable', 'string', 'max:20'],
+                'secondary_color' => ['nullable', 'string', 'max:20'],
+            ],
+            'seo' => [
+                'meta_title' => ['nullable', 'string', 'max:255'],
+                'meta_description' => ['nullable', 'string', 'max:300'],
+            ],
+            'publication' => [
+                'status' => ['required', 'in:draft,published'],
+                'hero_title' => ['nullable', 'string', 'max:255'],
+                'hero_subtitle' => ['nullable', 'string', 'max:255'],
+                'about_title' => ['nullable', 'string', 'max:255'],
+                'about_body' => ['nullable', 'string', 'max:1000'],
+                'contact_title' => ['nullable', 'string', 'max:255'],
+                'footer_text' => ['nullable', 'string', 'max:255'],
+            ],
+            default => [],
+        };
 
-        $landing->update([
-            'name' => $data['name'],
-            'tagline' => $data['tagline'] ?? null,
-            'primary_color' => $data['primary_color'] ?: '#0d6efd',
-            'secondary_color' => $data['secondary_color'] ?: '#20c997',
-            'whatsapp_number' => $data['whatsapp_number'] ?? null,
-            'contact_email' => $data['contact_email'] ?? null,
-            'slug' => $data['slug'],
-            'template_key' => $data['template_key'],
-            'status' => $data['status'],
-            'meta_title' => $data['meta_title'] ?? null,
-            'meta_description' => $data['meta_description'] ?? null,
-            'hero_title' => $data['hero_title'] ?? null,
-            'hero_subtitle' => $data['hero_subtitle'] ?? null,
-            'about_title' => $data['about_title'] ?? null,
-            'about_body' => $data['about_body'] ?? null,
-            'contact_title' => $data['contact_title'] ?? null,
-            'footer_text' => $data['footer_text'] ?? null,
-        ]);
+        if ($rules === []) {
+            return redirect()->route('owner.ui.landing.tab', ['tab' => 'general'])->with('error', 'Section invalide.');
+        }
 
-        return redirect()->route('owner.ui.landing.index')->with('success', 'Landing page mise à jour.');
+        $data = $request->validate($rules);
+
+        if ($section === 'template') {
+            $data['primary_color'] = $data['primary_color'] ?: '#0d6efd';
+            $data['secondary_color'] = $data['secondary_color'] ?: '#20c997';
+        }
+
+        $landing->update($data);
+
+        return redirect()->route('owner.ui.landing.tab', ['tab' => $section])->with('success', 'Landing page mise à jour.');
     }
 
     public function updateSections(Request $request)
@@ -131,7 +138,7 @@ class LandingPageUiController extends Controller
             );
         }
 
-        return redirect()->route('owner.ui.landing.index')->with('success', 'Sections mises à jour.');
+        return redirect()->route('owner.ui.landing.tab', ['tab' => 'sections'])->with('success', 'Sections mises à jour.');
     }
 
     private function getOrCreateLanding(Pressing $pressing): Landing

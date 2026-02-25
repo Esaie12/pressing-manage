@@ -152,6 +152,7 @@ Route::middleware(['auth', RoleMiddleware::class.':owner'])->prefix('owner')->gr
     Route::post('/ui/subscriptions-module/orders/{order}/delivered', [SubscriptionModuleUiController::class, 'markOrderDelivered'])->name('owner.ui.subscriptions-module.orders.delivered');
 
     Route::get('/ui/landing', [LandingPageUiController::class, 'index'])->name('owner.ui.landing.index');
+    Route::get('/ui/landing/{tab}', [LandingPageUiController::class, 'index'])->whereIn('tab', ['general','template','sections','seo','publication'])->name('owner.ui.landing.tab');
     Route::post('/ui/modules/landing/toggle', [LandingPageUiController::class, 'toggle'])->name('owner.ui.modules.landing.toggle');
     Route::post('/ui/landing/settings', [LandingPageUiController::class, 'updateSettings'])->name('owner.ui.landing.settings.update');
     Route::post('/ui/landing/sections', [LandingPageUiController::class, 'updateSections'])->name('owner.ui.landing.sections.update');
