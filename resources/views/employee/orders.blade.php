@@ -126,7 +126,9 @@
 </div>
 
 @foreach($orders as $order)
-    @php$remaining=max(0,(float)$order->total-(float)$order->advance_amount); @endphp
+    @php
+    $remaining=max(0,(float)$order->total-(float)$order->advance_amount);
+     @endphp
         @if($remaining > 0)
             <div class="modal fade" id="payModal{{ $order->id }}" tabindex="-1" aria-hidden="true">
                 <div class="modal-dialog">
