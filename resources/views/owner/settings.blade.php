@@ -48,7 +48,9 @@
       @php
         $referenceMode = old('invoice_reference_mode', $invoiceSetting->invoice_reference_mode ?? 'random');
         $referenceSeparator = old('invoice_reference_separator', $invoiceSetting->invoice_reference_separator ?? '-');
-        $referenceParts = old('invoice_reference_parts', $invoiceSetting->invoice_reference_parts ?? ['ID', 'DATE', 'MOIS']);
+        $referenceParts = old('invoice_reference_parts', $invoiceSetting->invoice_reference_parts ?? ['ANNEE', 'JOUR', 'MOIS']);
+        $orderPrefix = old('invoice_order_reference_prefix', $invoiceSetting->invoice_order_reference_prefix ?? 'CMD');
+        $invoicePrefix = old('invoice_invoice_reference_prefix', $invoiceSetting->invoice_invoice_reference_prefix ?? 'FAC');
       @endphp
 
       <div class="col-12"><hr class="my-1"></div>
@@ -71,10 +73,20 @@
           <label class="btn btn-outline-secondary" for="sep_slash">/</label>
         </div>
       </div>
+
+      <div class="col-md-6 reference-custom-fields">
+        <label class="form-label">Préfixe des commandes (3 caractères)</label>
+        <input class="form-control text-uppercase" name="invoice_order_reference_prefix" maxlength="3" value="{{ $orderPrefix }}">
+      </div>
+      <div class="col-md-6 reference-custom-fields">
+        <label class="form-label">Préfixe des factures (3 caractères)</label>
+        <input class="form-control text-uppercase" name="invoice_invoice_reference_prefix" maxlength="3" value="{{ $invoicePrefix }}">
+      </div>
+
       <div class="col-md-12 reference-custom-fields">
         <label class="form-label">Ordre des éléments</label>
         <div class="d-flex flex-wrap gap-2 mb-2" id="referenceTokenButtons">
-          @foreach(['ID', 'DATE', 'MOIS', 'JOUR'] as $token)
+          @foreach(['ID', 'ANNEE', 'MOIS', 'JOUR'] as $token)
             <button type="button" class="btn btn-outline-primary reference-token-btn" data-token="{{ $token }}">{{ $token }}</button>
           @endforeach
         </div>
@@ -91,7 +103,7 @@
           @endfor
         </div>
 
-        <div class="form-text">Cliquez sur 3 boutons dans l'ordre voulu (ex: DATE puis ID puis MOIS).</div>
+        <div class="form-text">Cliquez sur 3 boutons dans l'ordre voulu (ex: ANNEE puis JOUR puis MOIS).</div>
       </div>
       <div class="col-12"><hr class="my-1"></div>
       <div class="col-12">
