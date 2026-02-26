@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Owner;
 
 use App\Http\Controllers\Controller;
+use App\Models\Agency;
 use App\Models\Client;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\Pressing;
 use App\Models\Service;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -44,11 +46,14 @@ class OrderController extends Controller
                 'email' => $data['client']['email'] ?? null,
             ]);
 
+            $pressingId = $request->user()->pressing_id ?? Agency::findOrFail($data['agency_id'])->pressing_id;
+            $pressing = Pressing::with('invoiceSetting')->findOrFail($pressingId);
+
             $order = Order::create([
                 'agency_id' => $data['agency_id'],
                 'client_id' => $client->id,
                 'employee_id' => $request->user()->id,
-                'reference' => 'CMD-'.strtoupper(uniqid()),
+                'reference' => $this->generateOrderReference($pressing),
                 'status' => 'pending',
                 'paid_advance' => $data['paid_advance'] ?? false,
                 'total' => 0,
@@ -92,5 +97,38 @@ class OrderController extends Controller
             'advance_paid_count' => (clone $query)->where('paid_advance', true)->count(),
             'picked_up_count' => (clone $query)->whereNotNull('picked_up_at')->count(),
         ]);
+    }
+
+    private function generateOrderReference(Pressing $pressing): string
+    {
+        $setting = $pressing->invoiceSetting;
+        $prefix = strtoupper($setting?->invoice_order_reference_prefix ?? 'CMD');
+
+        if (! $setting || ($setting->invoice_reference_mode ?? 'random') !== 'custom' || empty($setting->invoice_reference_parts)) {
+            return $prefix.'-'.strtoupper(uniqid());
+        }
+
+        $nextId = ((int) Order::max('id')) + 1;
+        $separator = in_array($setting->invoice_reference_separator, ['-', '/'], true) ? $setting->invoice_reference_separator : '-';
+        $date = now();
+
+        $map = [
+            'ID' => (string) $nextId,
+            'ANNEE' => $date->format('Y'),
+            'MOIS' => $date->format('m'),
+            'JOUR' => $date->format('d'),
+        ];
+
+        $parts = [$prefix];
+        foreach ((array) $setting->invoice_reference_parts as $part) {
+            $parts[] = $map[$part] ?? $part;
+        }
+
+        $reference = implode($separator, $parts);
+        if (! Order::where('reference', $reference)->exists()) {
+            return $reference;
+        }
+
+        return $reference.$separator.strtoupper(substr(uniqid(), -5));
     }
 }

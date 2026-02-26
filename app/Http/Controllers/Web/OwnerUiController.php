@@ -1260,6 +1260,8 @@ class OwnerUiController extends Controller
                 'invoice_primary_color' => '#0d6efd',
                 'invoice_reference_mode' => 'random',
                 'invoice_reference_separator' => '-',
+                'invoice_order_reference_prefix' => 'CMD',
+                'invoice_invoice_reference_prefix' => 'FAC',
             ]);
             $pressing->load('invoiceSetting');
         }
@@ -1294,7 +1296,9 @@ class OwnerUiController extends Controller
             $rules['invoice_reference_mode'] = ['required', 'in:random,custom'];
             $rules['invoice_reference_separator'] = ['required_if:invoice_reference_mode,custom', 'in:-,/'];
             $rules['invoice_reference_parts'] = ['required_if:invoice_reference_mode,custom', 'array', 'size:3'];
-            $rules['invoice_reference_parts.*'] = ['required_if:invoice_reference_mode,custom', 'in:ID,DATE,MOIS,JOUR'];
+            $rules['invoice_reference_parts.*'] = ['required_if:invoice_reference_mode,custom', 'in:ID,ANNEE,MOIS,JOUR'];
+            $rules['invoice_order_reference_prefix'] = ['nullable', 'string', 'size:3', 'regex:/^[A-Za-z0-9]{3}$/'];
+            $rules['invoice_invoice_reference_prefix'] = ['nullable', 'string', 'size:3', 'regex:/^[A-Za-z0-9]{3}$/'];
         }
 
         $data = $request->validate($rules);
@@ -1306,7 +1310,9 @@ class OwnerUiController extends Controller
                 $data['invoice_welcome_message'],
                 $data['invoice_reference_mode'],
                 $data['invoice_reference_separator'],
-                $data['invoice_reference_parts']
+                $data['invoice_reference_parts'],
+                $data['invoice_order_reference_prefix'],
+                $data['invoice_invoice_reference_prefix']
             );
             if ($request->hasFile('invoice_logo')) {
                 return redirect()->route('owner.ui.settings')->with('error', 'Votre pack ne permet pas la personnalisation.');
@@ -1344,6 +1350,8 @@ class OwnerUiController extends Controller
                 'invoice_reference_mode' => $data['invoice_reference_mode'] ?? ($pressing->invoiceSetting?->invoice_reference_mode ?? 'random'),
                 'invoice_reference_separator' => $data['invoice_reference_separator'] ?? ($pressing->invoiceSetting?->invoice_reference_separator ?? '-'),
                 'invoice_reference_parts' => $data['invoice_reference_parts'] ?? ($pressing->invoiceSetting?->invoice_reference_parts),
+                'invoice_order_reference_prefix' => strtoupper($data['invoice_order_reference_prefix'] ?? ($pressing->invoiceSetting?->invoice_order_reference_prefix ?? 'CMD')),
+                'invoice_invoice_reference_prefix' => strtoupper($data['invoice_invoice_reference_prefix'] ?? ($pressing->invoiceSetting?->invoice_invoice_reference_prefix ?? 'FAC')),
             ]
         );
 
@@ -1798,7 +1806,7 @@ class OwnerUiController extends Controller
 
         $order = $existing ?? new Order();
         if (! $existing) {
-            $order->reference = 'CMD-'.strtoupper(uniqid());
+            $order->reference = $this->generateOrderNumber($agency->pressing()->with('invoiceSetting')->firstOrFail());
             $order->employee_id = Auth::id();
         }
 
@@ -1961,29 +1969,51 @@ class OwnerUiController extends Controller
 
     private function generateInvoiceNumber(Pressing $pressing): string
     {
+        return $this->generateReferenceNumber($pressing, 'invoice');
+    }
+
+    private function generateOrderNumber(Pressing $pressing): string
+    {
+        return $this->generateReferenceNumber($pressing, 'order');
+    }
+
+    private function generateReferenceNumber(Pressing $pressing, string $type): string
+    {
         $setting = $pressing->invoiceSetting;
+        $defaultPrefix = $type === 'order' ? 'CMD' : 'FAC';
+        $prefixField = $type === 'order' ? 'invoice_order_reference_prefix' : 'invoice_invoice_reference_prefix';
+        $prefix = strtoupper($setting?->{$prefixField} ?? $defaultPrefix);
 
         if (! $setting || ($setting->invoice_reference_mode ?? 'random') !== 'custom' || empty($setting->invoice_reference_parts)) {
-            return 'FAC-'.strtoupper(uniqid());
+            return $prefix.'-'.strtoupper(uniqid());
         }
 
-        $nextId = ((int) Invoice::max('id')) + 1;
+        $nextId = $type === 'order' ? (((int) Order::max('id')) + 1) : (((int) Invoice::max('id')) + 1);
         $separator = in_array($setting->invoice_reference_separator, ['-', '/'], true) ? $setting->invoice_reference_separator : '-';
         $date = now();
 
         $map = [
             'ID' => (string) $nextId,
-            'DATE' => $date->format('Ymd'),
+            'ANNEE' => $date->format('Y'),
             'MOIS' => $date->format('m'),
             'JOUR' => $date->format('d'),
         ];
 
-        $parts = [];
+        $parts = [$prefix];
         foreach ((array) $setting->invoice_reference_parts as $part) {
             $parts[] = $map[$part] ?? $part;
         }
 
-        return implode($separator, $parts);
+        $reference = implode($separator, $parts);
+        $exists = $type === 'order'
+            ? Order::where('reference', $reference)->exists()
+            : Invoice::where('invoice_number', $reference)->exists();
+
+        if (! $exists) {
+            return $reference;
+        }
+
+        return $reference.$separator.strtoupper(substr(uniqid(), -5));
     }
 
     private function activePlan(int $pressingId): ?SubscriptionPlan

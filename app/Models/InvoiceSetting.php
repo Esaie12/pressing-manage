@@ -15,6 +15,8 @@ class InvoiceSetting extends Model
         'invoice_reference_mode',
         'invoice_reference_separator',
         'invoice_reference_parts',
+        'invoice_order_reference_prefix',
+        'invoice_invoice_reference_prefix',
     ];
 
     protected $casts = [

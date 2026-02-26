@@ -439,7 +439,7 @@ class EmployeeUiController extends Controller
             Invoice::create([
                 'order_id' => $order->id,
                 'pressing_id' => Auth::user()->pressing_id,
-                'invoice_number' => 'FAC-'.strtoupper(uniqid()),
+                'invoice_number' => $this->generateInvoiceNumber(Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id)),
                 'amount' => $total,
                 'issued_at' => now()->toDateString(),
             ]);
@@ -695,7 +695,7 @@ class EmployeeUiController extends Controller
 
         $order = $existing ?? new Order();
         if (! $existing) {
-            $order->reference = 'CMD-'.strtoupper(uniqid());
+            $order->reference = $this->generateOrderNumber(Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id));
             $order->employee_id = Auth::id();
         }
 
@@ -719,6 +719,56 @@ class EmployeeUiController extends Controller
         }
 
         return [$order, $total];
+    }
+
+
+    private function generateInvoiceNumber(Pressing $pressing): string
+    {
+        return $this->generateReferenceNumber($pressing, 'invoice');
+    }
+
+    private function generateOrderNumber(Pressing $pressing): string
+    {
+        return $this->generateReferenceNumber($pressing, 'order');
+    }
+
+    private function generateReferenceNumber(Pressing $pressing, string $type): string
+    {
+        $setting = $pressing->invoiceSetting;
+        $defaultPrefix = $type === 'order' ? 'CMD' : 'FAC';
+        $prefixField = $type === 'order' ? 'invoice_order_reference_prefix' : 'invoice_invoice_reference_prefix';
+        $prefix = strtoupper($setting?->{$prefixField} ?? $defaultPrefix);
+
+        if (! $setting || ($setting->invoice_reference_mode ?? 'random') !== 'custom' || empty($setting->invoice_reference_parts)) {
+            return $prefix.'-'.strtoupper(uniqid());
+        }
+
+        $nextId = $type === 'order' ? (((int) Order::max('id')) + 1) : (((int) Invoice::max('id')) + 1);
+        $separator = in_array($setting->invoice_reference_separator, ['-', '/'], true) ? $setting->invoice_reference_separator : '-';
+        $date = now();
+
+        $map = [
+            'ID' => (string) $nextId,
+            'ANNEE' => $date->format('Y'),
+            'MOIS' => $date->format('m'),
+            'JOUR' => $date->format('d'),
+        ];
+
+        $parts = [$prefix];
+        foreach ((array) $setting->invoice_reference_parts as $part) {
+            $parts[] = $map[$part] ?? $part;
+        }
+
+        $reference = implode($separator, $parts);
+        $exists = $type === 'order'
+            ? Order::where('reference', $reference)->exists()
+            : Invoice::where('invoice_number', $reference)->exists();
+
+        if (! $exists) {
+            return $reference;
+        }
+
+        return $reference.$separator.strtoupper(substr(uniqid(), -5));
     }
 
     private function canCancelTransaction(Pressing $pressing, Transaction $transaction): bool
