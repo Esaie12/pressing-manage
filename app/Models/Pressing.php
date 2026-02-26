@@ -14,15 +14,19 @@ class Pressing extends Model
         'module_accounting_enabled',
         'module_stock_enabled',
         'module_subscription_enabled',
+        'module_landing_enabled',
         'stock_mode',
     ];
 
     protected $casts = [
         'allow_transaction_cancellation' => 'boolean',
+        'invoice_reference_parts' => 'array',
+        'invoice_reference_locked' => 'boolean',
         'module_cash_closure_enabled' => 'boolean',
         'module_accounting_enabled' => 'boolean',
         'module_stock_enabled' => 'boolean',
         'module_subscription_enabled' => 'boolean',
+        'module_landing_enabled' => 'boolean',
     ];
 
     public function owner()
@@ -55,4 +59,9 @@ class Pressing extends Model
     {
         return $this->hasMany(CashClosure::class);
     }
+    public function landing()
+    {
+        return $this->hasOne(Landing::class);
+    }
+
 }

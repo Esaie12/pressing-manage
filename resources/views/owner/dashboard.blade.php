@@ -114,6 +114,25 @@
     </div>
   </div>
 
+
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-body d-flex flex-column gap-2">
+        <h5 class="mb-0">Module Landing Page</h5>
+        <div class="text-muted small">Créez une page vitrine publique personnalisable pour votre pressing.</div>
+        <div class="mt-2 d-flex gap-2 align-items-center">
+          <form method="POST" action="{{ route('owner.ui.modules.landing.toggle') }}">
+            @csrf
+            <button class="btn btn-{{ optional($pressing)->module_landing_enabled ? 'outline-danger' : 'primary' }}">{{ optional($pressing)->module_landing_enabled ? 'Désactiver' : 'Activer' }}</button>
+          </form>
+          @if(optional($pressing)->module_landing_enabled)
+            <a href="{{ route('owner.ui.landing.index') }}" class="btn btn-outline-primary">Configurer</a>
+          @endif
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="col-lg-6">
     <div class="card shadow-sm h-100 border-warning-subtle">
       <div class="card-body d-flex flex-column gap-2">

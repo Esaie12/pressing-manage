@@ -1413,6 +1413,9 @@ class OwnerUiController extends Controller
         if ($pressing->module_subscription_enabled && ! $plan->allow_subscription_module) {
             return redirect()->route('owner.ui.pricing')->with('error', 'Désactivez le module Abonnements clients avant de prendre ce pack.');
         }
+        if ($pressing->module_landing_enabled && ! $plan->allow_landing_module) {
+            return redirect()->route('owner.ui.pricing')->with('error', 'Désactivez le module Landing Page avant de prendre ce pack.');
+        }
 
         OwnerSubscription::where('pressing_id', Auth::user()->pressing_id)->where('is_active', true)->update(['is_active' => false]);
 

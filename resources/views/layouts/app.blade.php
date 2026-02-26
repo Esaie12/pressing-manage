@@ -103,12 +103,15 @@
                     @endif
                     <li class="nav-item"><a class="nav-link {{ request()->routeIs('owner.ui.pricing*') ? 'active fw-semibold' : '' }}" href="{{ route('owner.ui.pricing') }}">Abonnement</a></li>
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {{ request()->routeIs('owner.ui.settings*','owner.ui.agencies*','owner.ui.employees*','owner.ui.services*') ? 'active fw-semibold' : '' }}" href="#" role="button" data-bs-toggle="dropdown">Paramètres</a>
+                        <a class="nav-link dropdown-toggle {{ request()->routeIs('owner.ui.settings*','owner.ui.agencies*','owner.ui.employees*','owner.ui.services*','owner.ui.landing*') ? 'active fw-semibold' : '' }}" href="#" role="button" data-bs-toggle="dropdown">Paramètres</a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ route('owner.ui.settings') }}">Mon pressing</a></li>
                             <li><a class="dropdown-item" href="{{ route('owner.ui.agencies') }}">Mes agences</a></li>
                             <li><a class="dropdown-item" href="{{ route('owner.ui.employees') }}">Employés</a></li>
                             <li><a class="dropdown-item" href="{{ route('owner.ui.services') }}">Services</a></li>
+                            @if($ownerPressing?->module_landing_enabled)
+                                <li><a class="dropdown-item" href="{{ route('owner.ui.landing.index') }}">Landing page</a></li>
+                            @endif
                         </ul>
                     </li>
                 @endif
