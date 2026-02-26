@@ -124,6 +124,15 @@ class OrderController extends Controller
             $parts[] = $map[$part] ?? $part;
         }
 
+<<<<<<< codex/update-invoice-customization-options-r5shzb
+        $reference = implode($separator, $parts);
+        if (! Order::where('reference', $reference)->exists()) {
+            return $reference;
+        }
+
+        return $reference.$separator.strtoupper(substr(uniqid(), -5));
+=======
         return implode($separator, $parts);
+>>>>>>> dev
     }
 }

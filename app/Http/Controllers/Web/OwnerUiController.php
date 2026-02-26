@@ -2004,7 +2004,16 @@ class OwnerUiController extends Controller
             $parts[] = $map[$part] ?? $part;
         }
 
-        return implode($separator, $parts);
+        $reference = implode($separator, $parts);
+        $exists = $type === 'order'
+            ? Order::where('reference', $reference)->exists()
+            : Invoice::where('invoice_number', $reference)->exists();
+
+        if (! $exists) {
+            return $reference;
+        }
+
+        return $reference.$separator.strtoupper(substr(uniqid(), -5));
     }
 
     private function activePlan(int $pressingId): ?SubscriptionPlan

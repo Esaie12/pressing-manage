@@ -188,8 +188,7 @@
                 let total = 0;
                 c.querySelectorAll('.emp-item-row').forEach(r => {
                     const s = r.querySelector('.emp-item-service');
-                    total += n(s.options[s.selectedIndex] ? .dataset ? .price || 0) * n(r.querySelector(
-                        '.emp-item-qty').value || 0);
+                    total += n(s.options[s.selectedIndex]?.dataset?.price || 0) * n(r.querySelector('.emp-item-qty').value || 0);
                 });
                 if (delivery.checked) {
                     total += n(deliveryFee.value || 0);
