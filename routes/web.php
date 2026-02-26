@@ -14,10 +14,13 @@ use App\Http\Controllers\Web\OwnerUiController;
 use App\Http\Controllers\Web\SubscriptionModuleUiController;
 use App\Http\Controllers\Web\EmployeeSubscriptionModuleUiController;
 use App\Http\Controllers\Web\ProfileUiController;
+use App\Http\Controllers\Web\LandingPageUiController;
+use App\Http\Controllers\Web\PublicLandingController;
 use App\Http\Middleware\RoleMiddleware;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => view('landing'))->name('landing');
+Route::get('/p/{slug}', [PublicLandingController::class, 'show'])->name('landing.public.show');
 
 Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard', function () {
@@ -147,6 +150,12 @@ Route::middleware(['auth', RoleMiddleware::class.':owner'])->prefix('owner')->gr
     Route::post('/ui/subscriptions-module/orders', [SubscriptionModuleUiController::class, 'storeOrder'])->name('owner.ui.subscriptions-module.orders.store');
     Route::post('/ui/subscriptions-module/orders/{order}/ready', [SubscriptionModuleUiController::class, 'markOrderReady'])->name('owner.ui.subscriptions-module.orders.ready');
     Route::post('/ui/subscriptions-module/orders/{order}/delivered', [SubscriptionModuleUiController::class, 'markOrderDelivered'])->name('owner.ui.subscriptions-module.orders.delivered');
+
+    Route::get('/ui/landing', [LandingPageUiController::class, 'index'])->name('owner.ui.landing.index');
+    Route::get('/ui/landing/{tab}', [LandingPageUiController::class, 'index'])->whereIn('tab', ['general','template','sections','seo','publication'])->name('owner.ui.landing.tab');
+    Route::post('/ui/modules/landing/toggle', [LandingPageUiController::class, 'toggle'])->name('owner.ui.modules.landing.toggle');
+    Route::post('/ui/landing/settings', [LandingPageUiController::class, 'updateSettings'])->name('owner.ui.landing.settings.update');
+    Route::post('/ui/landing/sections', [LandingPageUiController::class, 'updateSections'])->name('owner.ui.landing.sections.update');
 
     Route::get('/ui/accounting/reports/{report}', [OwnerUiController::class, 'showAccountingReport'])->name('owner.ui.accounting.reports.show');
 });

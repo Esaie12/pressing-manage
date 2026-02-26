@@ -12,6 +12,7 @@ class SubscriptionPlan extends Model
         'allow_accounting_module' => 'boolean',
         'allow_stock_module' => 'boolean',
         'allow_subscription_module' => 'boolean',
+        'allow_landing_module' => 'boolean',
         'is_custom' => 'boolean',
     ];
 
@@ -26,6 +27,7 @@ class SubscriptionPlan extends Model
         'allow_accounting_module',
         'allow_stock_module',
         'allow_subscription_module',
+        'allow_landing_module',
         'is_custom',
         'pressing_id',
     ];

@@ -10,7 +10,7 @@
         <form method="POST" action="{{ route('owner.ui.employees.store') }}" class="vstack gap-2">
           @csrf
           <input class="form-control" name="name" placeholder="Nom" required>
-          <input class="form-control" name="email" type="email" placeholder="Email" required>
+          <div class="form-text">Email généré automatiquement: <code>nom_employe_numID@nomdupressing.com</code></div>
           <input class="form-control" name="password" type="password" placeholder="Mot de passe" required>
           <select class="form-select" name="gender"><option value="">-- Sexe --</option><option value="homme">Homme</option><option value="femme">Femme</option><option value="autre">Autre</option></select>
           <input class="form-control" name="phone" placeholder="Téléphone">

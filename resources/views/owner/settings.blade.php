@@ -44,6 +44,48 @@
       <div class="col-md-4"><label class="form-label">Couleur principale</label><input type="color" class="form-control form-control-color" name="invoice_primary_color" value="{{ old('invoice_primary_color', $pressing->invoice_primary_color ?? '#0d6efd') }}"></div>
       <div class="col-md-12"><label class="form-label">Message de bienvenue facture</label><input class="form-control" name="invoice_welcome_message" value="{{ old('invoice_welcome_message', $pressing->invoice_welcome_message) }}"></div>
 
+
+      @php
+        $referenceMode = old('invoice_reference_mode', $pressing->invoice_reference_mode ?? 'random');
+        $referenceSeparator = old('invoice_reference_separator', $pressing->invoice_reference_separator ?? '-');
+        $referenceParts = old('invoice_reference_parts', $pressing->invoice_reference_parts ?? ['ID', 'DATE', 'MOIS']);
+      @endphp
+
+      <div class="col-12"><hr class="my-1"></div>
+      <div class="col-12">
+        <h6 class="mb-2">Référence des factures</h6>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Mode de référence</label>
+        <select class="form-select" name="invoice_reference_mode" id="invoice_reference_mode">
+          <option value="random" @selected($referenceMode === 'random')>Aléatoire</option>
+          <option value="custom" @selected($referenceMode === 'custom')>Personnalisé</option>
+        </select>
+      </div>
+      <div class="col-md-4 reference-custom-fields">
+        <label class="form-label">Séparateur</label>
+        <div class="btn-group w-100" role="group">
+          <input type="radio" class="btn-check" name="invoice_reference_separator" id="sep_dash" value="-" @checked($referenceSeparator === '-')>
+          <label class="btn btn-outline-secondary" for="sep_dash">-</label>
+          <input type="radio" class="btn-check" name="invoice_reference_separator" id="sep_slash" value="/" @checked($referenceSeparator === '/')>
+          <label class="btn btn-outline-secondary" for="sep_slash">/</label>
+        </div>
+      </div>
+      <div class="col-md-12 reference-custom-fields">
+        <label class="form-label">Ordre des éléments</label>
+        <div class="row g-2">
+          @for($i = 0; $i < 3; $i++)
+            <div class="col-md-4">
+              <select class="form-select" name="invoice_reference_parts[]">
+                @foreach(['ID', 'DATE', 'MOIS', 'JOUR'] as $token)
+                  <option value="{{ $token }}" @selected(($referenceParts[$i] ?? null) === $token)>{{ $token }}</option>
+                @endforeach
+              </select>
+            </div>
+          @endfor
+        </div>
+        <div class="form-text">Exemples: DATE-ID-MOIS, ID-MOIS-JOUR, JOUR/MOIS/DATE.</div>
+      </div>
       <div class="col-12"><hr class="my-1"></div>
       <div class="col-12">
         <h6 class="mb-2">Annulation des transactions</h6>
@@ -83,6 +125,20 @@
     cancellationToggle.addEventListener('change', syncCancellationWindow);
     syncCancellationWindow();
   }
+
+
+  const referenceMode = document.getElementById('invoice_reference_mode');
+  const referenceCustomFields = document.querySelectorAll('.reference-custom-fields');
+  const syncReferenceMode = () => {
+    if (!referenceMode) return;
+    const isCustom = referenceMode.value === 'custom';
+    referenceCustomFields.forEach((el) => el.classList.toggle('d-none', !isCustom));
+  };
+  if (referenceMode) {
+    referenceMode.addEventListener('change', syncReferenceMode);
+    syncReferenceMode();
+  }
+
 
 </script>
 @endsection
