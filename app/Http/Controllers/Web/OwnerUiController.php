@@ -846,7 +846,6 @@ class OwnerUiController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'agency_id' => ['required', 'exists:agencies,id'],
             'gender' => ['nullable', 'in:homme,femme,autre'],
@@ -868,9 +867,11 @@ class OwnerUiController extends Controller
             ->where('is_active', true)
             ->firstOrFail();
 
+        $employeeEmail = $this->buildEmployeeEmail($data['name'], $pressingId);
+
         User::create([
             'name' => $data['name'],
-            'email' => $data['email'],
+            'email' => $employeeEmail,
             'password' => Hash::make($data['password']),
             'role' => User::ROLE_EMPLOYEE,
             'is_active' => true,
@@ -1041,7 +1042,7 @@ class OwnerUiController extends Controller
             Invoice::create([
                 'order_id' => $order->id,
                 'pressing_id' => Auth::user()->pressing_id,
-                'invoice_number' => 'FAC-'.strtoupper(uniqid()),
+                'invoice_number' => $this->generateInvoiceNumber(Auth::user()->pressing),
                 'amount' => $total,
                 'issued_at' => now()->toDateString(),
             ]);
@@ -1099,7 +1100,7 @@ class OwnerUiController extends Controller
                 Invoice::create([
                     'order_id' => $updated->id,
                     'pressing_id' => Auth::user()->pressing_id,
-                    'invoice_number' => 'FAC-'.strtoupper(uniqid()),
+                    'invoice_number' => $this->generateInvoiceNumber(Auth::user()->pressing),
                     'amount' => $total,
                     'issued_at' => now()->toDateString(),
                 ]);
@@ -1257,7 +1258,11 @@ class OwnerUiController extends Controller
 
     public function updateSettings(Request $request)
     {
-        $data = $request->validate([
+        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+
+        $referenceIsEditable = $this->planAllows($pressing->id, 'allow_customization');
+
+        $rules = [
             'name' => ['required', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:50'],
             'address' => ['nullable', 'string', 'max:255'],
@@ -1269,15 +1274,41 @@ class OwnerUiController extends Controller
             'closing_time' => ['nullable', 'date_format:H:i'],
             'allow_transaction_cancellation' => ['nullable', 'boolean'],
             'transaction_cancellation_window_minutes' => ['nullable', 'required_if:allow_transaction_cancellation,1', 'integer', 'min:1', 'max:1440'],
-        ]);
+        ];
 
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        if ($referenceIsEditable) {
+            $rules['invoice_reference_mode'] = ['required', 'in:random,custom'];
+            $rules['invoice_reference_separator'] = ['required_if:invoice_reference_mode,custom', 'in:-,/'];
+            $rules['invoice_reference_parts'] = ['required_if:invoice_reference_mode,custom', 'array', 'size:3'];
+            $rules['invoice_reference_parts.*'] = ['required_if:invoice_reference_mode,custom', 'in:ID,DATE,MOIS,JOUR'];
+        }
+
+        $data = $request->validate($rules);
 
         if (! $this->planAllows($pressing->id, 'allow_customization')) {
-            unset($data['invoice_template'], $data['invoice_primary_color'], $data['invoice_welcome_message']);
+            unset(
+                $data['invoice_template'],
+                $data['invoice_primary_color'],
+                $data['invoice_welcome_message'],
+                $data['invoice_reference_mode'],
+                $data['invoice_reference_separator'],
+                $data['invoice_reference_parts']
+            );
             if ($request->hasFile('invoice_logo')) {
                 return redirect()->route('owner.ui.settings')->with('error', 'Votre pack ne permet pas la personnalisation.');
             }
+        }
+
+        if (($data['invoice_reference_mode'] ?? 'random') === 'custom') {
+            $parts = $data['invoice_reference_parts'] ?? [];
+            if (count($parts) !== count(array_unique($parts))) {
+                return redirect()->route('owner.ui.settings')->with('error', 'Chaque élément du format de référence doit être unique.');
+            }
+            $data['invoice_reference_locked'] = false;
+        } else {
+            $data['invoice_reference_separator'] = '-';
+            $data['invoice_reference_parts'] = null;
+            $data['invoice_reference_locked'] = false;
         }
 
         if ($request->hasFile('invoice_logo')) {
@@ -1869,6 +1900,52 @@ class OwnerUiController extends Controller
         }
 
         $balance->update(['quantity' => $next]);
+    }
+
+
+    private function buildEmployeeEmail(string $employeeName, int $pressingId): string
+    {
+        $employeeSlug = trim(preg_replace('/[^a-z0-9]+/', '_', strtolower(iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $employeeName))), '_') ?: 'employe';
+        $pressing = Pressing::findOrFail($pressingId);
+        $domainSlug = trim(preg_replace('/[^a-z0-9]+/', '', strtolower(iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $pressing->name))), '') ?: 'pressing';
+
+        $baseEmail = sprintf('%s_%d@%s.com', $employeeSlug, $pressingId, $domainSlug);
+        if (! User::where('email', $baseEmail)->exists()) {
+            return $baseEmail;
+        }
+
+        $counter = 2;
+        do {
+            $candidate = sprintf('%s_%d_%d@%s.com', $employeeSlug, $pressingId, $counter, $domainSlug);
+            $counter++;
+        } while (User::where('email', $candidate)->exists());
+
+        return $candidate;
+    }
+
+    private function generateInvoiceNumber(Pressing $pressing): string
+    {
+        if (($pressing->invoice_reference_mode ?? 'random') !== 'custom' || empty($pressing->invoice_reference_parts)) {
+            return 'FAC-'.strtoupper(uniqid());
+        }
+
+        $nextId = ((int) Invoice::max('id')) + 1;
+        $separator = in_array($pressing->invoice_reference_separator, ['-', '/'], true) ? $pressing->invoice_reference_separator : '-';
+        $date = now();
+
+        $map = [
+            'ID' => (string) $nextId,
+            'DATE' => $date->format('Ymd'),
+            'MOIS' => $date->format('m'),
+            'JOUR' => $date->format('d'),
+        ];
+
+        $parts = [];
+        foreach ((array) $pressing->invoice_reference_parts as $part) {
+            $parts[] = $map[$part] ?? $part;
+        }
+
+        return implode($separator, $parts);
     }
 
     private function activePlan(int $pressingId): ?SubscriptionPlan
