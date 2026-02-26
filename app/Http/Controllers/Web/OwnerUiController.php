@@ -16,6 +16,7 @@ use App\Models\CustomPackRequest;
 use App\Models\EmployeeRequest;
 use App\Models\Expense;
 use App\Models\Invoice;
+use App\Models\InvoiceSetting;
 use App\Models\Order;
 use App\Models\OrderStatus;
 use App\Models\OrderItem;
@@ -76,7 +77,7 @@ class OwnerUiController extends Controller
 
     public function toggleCashClosureModule()
     {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
 
         if (! $this->planAllows($pressing->id, 'allow_cash_closure_module')) {
             return redirect()->route('owner.ui.dashboard')->with('error', 'Votre pack ne permet pas le module Clôture de caisse.');
@@ -91,7 +92,7 @@ class OwnerUiController extends Controller
 
     public function toggleAccountingModule()
     {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
 
         if (! $this->planAllows($pressing->id, 'allow_accounting_module')) {
             return redirect()->route('owner.ui.dashboard')->with('error', 'Votre pack ne permet pas le module Comptabilité.');
@@ -108,7 +109,7 @@ class OwnerUiController extends Controller
 
     public function toggleSubscriptionModule()
     {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
 
         if (! $this->planAllows($pressing->id, 'allow_subscription_module')) {
             return redirect()->route('owner.ui.dashboard')->with('error', 'Votre pack ne permet pas le module Abonnements clients.');
@@ -123,7 +124,7 @@ class OwnerUiController extends Controller
 
     public function toggleStockModule(Request $request)
     {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
 
         if (! $this->planAllows($pressing->id, 'allow_stock_module')) {
             return redirect()->route('owner.ui.dashboard')->with('error', 'Votre pack ne permet pas le module Stock.');
@@ -150,7 +151,7 @@ class OwnerUiController extends Controller
 
     public function stocks(Request $request)
     {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
         abort_if(! $pressing->module_stock_enabled, 403, 'Module Stock non activé.');
 
         $date = $request->query('movement_date', now()->toDateString());
@@ -216,7 +217,7 @@ class OwnerUiController extends Controller
 
     public function storeStockItem(Request $request)
     {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
         abort_if(! $pressing->module_stock_enabled, 403, 'Module Stock non activé.');
 
         $data = $request->validate([
@@ -246,7 +247,7 @@ class OwnerUiController extends Controller
 
     public function updateStockItem(Request $request, StockItem $stockItem)
     {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
         abort_if($stockItem->pressing_id !== $pressing->id, 403);
 
         $data = $request->validate([
@@ -274,7 +275,7 @@ class OwnerUiController extends Controller
 
     public function destroyStockItem(StockItem $stockItem)
     {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
         abort_if($stockItem->pressing_id !== $pressing->id, 403);
 
         $hasMovements = StockMovement::where('pressing_id', $pressing->id)
@@ -295,7 +296,7 @@ class OwnerUiController extends Controller
 
     public function storeSupplier(Request $request)
     {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
         abort_if(! $pressing->module_stock_enabled, 403, 'Module Stock non activé.');
 
         $data = $request->validate([
@@ -312,7 +313,7 @@ class OwnerUiController extends Controller
 
     public function updateSupplier(Request $request, Supplier $supplier)
     {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
         abort_if($supplier->pressing_id !== $pressing->id, 403);
 
         $data = $request->validate([
@@ -329,7 +330,7 @@ class OwnerUiController extends Controller
 
     public function destroySupplier(Supplier $supplier)
     {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
         abort_if($supplier->pressing_id !== $pressing->id, 403);
 
         $supplier->items()->detach();
@@ -383,7 +384,7 @@ class OwnerUiController extends Controller
 
     public function editStockMovement(StockMovement $stockMovement)
     {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
         abort_if($stockMovement->pressing_id !== $pressing->id, 403);
 
         if (! $this->canEditStockMovement($stockMovement)) {
@@ -399,7 +400,7 @@ class OwnerUiController extends Controller
 
     public function updateStockMovement(Request $request, StockMovement $stockMovement)
     {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
         abort_if($stockMovement->pressing_id !== $pressing->id, 403);
 
         if (! $this->canEditStockMovement($stockMovement)) {
@@ -444,7 +445,7 @@ class OwnerUiController extends Controller
 
     public function destroyStockMovement(StockMovement $stockMovement)
     {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
         abort_if($stockMovement->pressing_id !== $pressing->id, 403);
 
         if (! $this->canEditStockMovement($stockMovement)) {
@@ -461,7 +462,7 @@ class OwnerUiController extends Controller
 
     public function accountingSettings(Request $request)
     {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
         abort_if(! $pressing->module_accounting_enabled, 403, 'Module Comptabilité non activé.');
 
         $agencyId = $request->query('agency_id');
@@ -479,7 +480,7 @@ class OwnerUiController extends Controller
 
     public function saveAccountingSettings(Request $request)
     {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
         abort_if(! $pressing->module_accounting_enabled, 403, 'Module Comptabilité non activé.');
 
         $data = $request->validate([
@@ -532,7 +533,7 @@ class OwnerUiController extends Controller
 
     public function accountingReports(Request $request)
     {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
         abort_if(! $pressing->module_accounting_enabled, 403, 'Module Comptabilité non activé.');
 
         $month = $request->query('month', now()->startOfMonth()->toDateString());
@@ -555,7 +556,7 @@ class OwnerUiController extends Controller
 
     public function saveAccountingReport(Request $request)
     {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
         abort_if(! $pressing->module_accounting_enabled, 403, 'Module Comptabilité non activé.');
 
         $data = $request->validate([
@@ -696,7 +697,7 @@ class OwnerUiController extends Controller
 
     public function cashClosures(Request $request)
     {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
         abort_if(! $pressing->module_cash_closure_enabled, 403, 'Module Clôture de caisse non activé.');
 
         $closureDate = $request->query('closure_date', now()->toDateString());
@@ -715,7 +716,7 @@ class OwnerUiController extends Controller
 
     public function storeCashClosure(Request $request)
     {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
         abort_if(! $pressing->module_cash_closure_enabled, 403, 'Module Clôture de caisse non activé.');
 
         $data = $request->validate([
@@ -846,7 +847,6 @@ class OwnerUiController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'agency_id' => ['required', 'exists:agencies,id'],
             'gender' => ['nullable', 'in:homme,femme,autre'],
@@ -868,9 +868,11 @@ class OwnerUiController extends Controller
             ->where('is_active', true)
             ->firstOrFail();
 
+        $employeeEmail = $this->buildEmployeeEmail($data['name'], $pressingId);
+
         User::create([
             'name' => $data['name'],
-            'email' => $data['email'],
+            'email' => $employeeEmail,
             'password' => Hash::make($data['password']),
             'role' => User::ROLE_EMPLOYEE,
             'is_active' => true,
@@ -1041,7 +1043,7 @@ class OwnerUiController extends Controller
             Invoice::create([
                 'order_id' => $order->id,
                 'pressing_id' => Auth::user()->pressing_id,
-                'invoice_number' => 'FAC-'.strtoupper(uniqid()),
+                'invoice_number' => $this->generateInvoiceNumber(Auth::user()->pressing()->with('invoiceSetting')->first()),
                 'amount' => $total,
                 'issued_at' => now()->toDateString(),
             ]);
@@ -1099,7 +1101,7 @@ class OwnerUiController extends Controller
                 Invoice::create([
                     'order_id' => $updated->id,
                     'pressing_id' => Auth::user()->pressing_id,
-                    'invoice_number' => 'FAC-'.strtoupper(uniqid()),
+                    'invoice_number' => $this->generateInvoiceNumber(Auth::user()->pressing()->with('invoiceSetting')->first()),
                     'amount' => $total,
                     'issued_at' => now()->toDateString(),
                 ]);
@@ -1188,7 +1190,7 @@ class OwnerUiController extends Controller
 
     public function transactions()
     {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
 
         return view('owner.transactions', [
             'transactions' => Transaction::where('pressing_id', Auth::user()->pressing_id)
@@ -1202,7 +1204,7 @@ class OwnerUiController extends Controller
 
     public function cancelTransaction(Request $request, Transaction $transaction)
     {
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
         abort_unless($transaction->pressing_id === $pressing->id, 403);
 
         if (! $this->canCancelTransaction($pressing, $transaction)) {
@@ -1243,21 +1245,38 @@ class OwnerUiController extends Controller
     public function showInvoice(Invoice $invoice)
     {
         abort_unless($invoice->pressing_id === Auth::user()->pressing_id, 403);
-        $invoice->load(['order.items.service', 'order.client', 'order.agency', 'pressing']);
+        $invoice->load(['order.items.service', 'order.client', 'order.agency', 'pressing.invoiceSetting']);
 
         return view('owner.invoice-show', ['invoice' => $invoice]);
     }
 
     public function settings()
     {
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
+
+        if (! $pressing->invoiceSetting) {
+            $pressing->invoiceSetting()->create([
+                'invoice_template' => 'classic',
+                'invoice_primary_color' => '#0d6efd',
+                'invoice_reference_mode' => 'random',
+                'invoice_reference_separator' => '-',
+            ]);
+            $pressing->load('invoiceSetting');
+        }
+
         return view('owner.settings', [
-            'pressing' => Pressing::findOrFail(Auth::user()->pressing_id),
+            'pressing' => $pressing,
+            'invoiceSetting' => $pressing->invoiceSetting,
         ]);
     }
 
     public function updateSettings(Request $request)
     {
-        $data = $request->validate([
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
+
+        $referenceIsEditable = $this->planAllows($pressing->id, 'allow_customization');
+
+        $rules = [
             'name' => ['required', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:50'],
             'address' => ['nullable', 'string', 'max:255'],
@@ -1269,15 +1288,39 @@ class OwnerUiController extends Controller
             'closing_time' => ['nullable', 'date_format:H:i'],
             'allow_transaction_cancellation' => ['nullable', 'boolean'],
             'transaction_cancellation_window_minutes' => ['nullable', 'required_if:allow_transaction_cancellation,1', 'integer', 'min:1', 'max:1440'],
-        ]);
+        ];
 
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        if ($referenceIsEditable) {
+            $rules['invoice_reference_mode'] = ['required', 'in:random,custom'];
+            $rules['invoice_reference_separator'] = ['required_if:invoice_reference_mode,custom', 'in:-,/'];
+            $rules['invoice_reference_parts'] = ['required_if:invoice_reference_mode,custom', 'array', 'size:3'];
+            $rules['invoice_reference_parts.*'] = ['required_if:invoice_reference_mode,custom', 'in:ID,DATE,MOIS,JOUR'];
+        }
+
+        $data = $request->validate($rules);
 
         if (! $this->planAllows($pressing->id, 'allow_customization')) {
-            unset($data['invoice_template'], $data['invoice_primary_color'], $data['invoice_welcome_message']);
+            unset(
+                $data['invoice_template'],
+                $data['invoice_primary_color'],
+                $data['invoice_welcome_message'],
+                $data['invoice_reference_mode'],
+                $data['invoice_reference_separator'],
+                $data['invoice_reference_parts']
+            );
             if ($request->hasFile('invoice_logo')) {
                 return redirect()->route('owner.ui.settings')->with('error', 'Votre pack ne permet pas la personnalisation.');
             }
+        }
+
+        if (($data['invoice_reference_mode'] ?? 'random') === 'custom') {
+            $parts = $data['invoice_reference_parts'] ?? [];
+            if (count($parts) !== count(array_unique($parts))) {
+                return redirect()->route('owner.ui.settings')->with('error', 'Chaque élément du format de référence doit être unique.');
+            }
+        } else {
+            $data['invoice_reference_separator'] = '-';
+            $data['invoice_reference_parts'] = null;
         }
 
         if ($request->hasFile('invoice_logo')) {
@@ -1291,7 +1334,28 @@ class OwnerUiController extends Controller
             $data['transaction_cancellation_window_minutes'] = null;
         }
 
-        $pressing->update($data);
+        $pressing->invoiceSetting()->updateOrCreate(
+            ['pressing_id' => $pressing->id],
+            [
+                'invoice_template' => $data['invoice_template'] ?? ($pressing->invoiceSetting?->invoice_template ?? 'classic'),
+                'invoice_primary_color' => $data['invoice_primary_color'] ?? ($pressing->invoiceSetting?->invoice_primary_color ?? '#0d6efd'),
+                'invoice_welcome_message' => $data['invoice_welcome_message'] ?? ($pressing->invoiceSetting?->invoice_welcome_message),
+                'invoice_logo_path' => $data['invoice_logo_path'] ?? ($pressing->invoiceSetting?->invoice_logo_path),
+                'invoice_reference_mode' => $data['invoice_reference_mode'] ?? ($pressing->invoiceSetting?->invoice_reference_mode ?? 'random'),
+                'invoice_reference_separator' => $data['invoice_reference_separator'] ?? ($pressing->invoiceSetting?->invoice_reference_separator ?? '-'),
+                'invoice_reference_parts' => $data['invoice_reference_parts'] ?? ($pressing->invoiceSetting?->invoice_reference_parts),
+            ]
+        );
+
+        $pressing->update([
+            'name' => $data['name'],
+            'phone' => $data['phone'] ?? null,
+            'address' => $data['address'] ?? null,
+            'opening_time' => $data['opening_time'] ?? null,
+            'closing_time' => $data['closing_time'] ?? null,
+            'allow_transaction_cancellation' => $data['allow_transaction_cancellation'],
+            'transaction_cancellation_window_minutes' => $data['transaction_cancellation_window_minutes'] ?? null,
+        ]);
 
         return redirect()->route('owner.ui.settings')->with('success', 'Informations du pressing mises à jour.');
     }
@@ -1326,7 +1390,7 @@ class OwnerUiController extends Controller
         $end = $data['billing_cycle'] === 'monthly' ? now()->addMonth()->endOfDay() : now()->addYear()->endOfDay();
 
         $plan = SubscriptionPlan::findOrFail($data['subscription_plan_id']);
-        $pressing = Pressing::findOrFail(Auth::user()->pressing_id);
+        $pressing = Pressing::with('invoiceSetting')->findOrFail(Auth::user()->pressing_id);
 
         $agenciesCount = Agency::where('pressing_id', $pressing->id)->count();
         $employeesCount = User::where('pressing_id', $pressing->id)->where('role', User::ROLE_EMPLOYEE)->count();
@@ -1869,6 +1933,54 @@ class OwnerUiController extends Controller
         }
 
         $balance->update(['quantity' => $next]);
+    }
+
+
+    private function buildEmployeeEmail(string $employeeName, int $pressingId): string
+    {
+        $employeeSlug = trim(preg_replace('/[^a-z0-9]+/', '_', strtolower(iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $employeeName))), '_') ?: 'employe';
+        $pressing = Pressing::findOrFail($pressingId);
+        $domainSlug = trim(preg_replace('/[^a-z0-9]+/', '', strtolower(iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $pressing->name))), '') ?: 'pressing';
+
+        $baseEmail = sprintf('%s_%d@%s.com', $employeeSlug, $pressingId, $domainSlug);
+        if (! User::where('email', $baseEmail)->exists()) {
+            return $baseEmail;
+        }
+
+        $counter = 2;
+        do {
+            $candidate = sprintf('%s_%d_%d@%s.com', $employeeSlug, $pressingId, $counter, $domainSlug);
+            $counter++;
+        } while (User::where('email', $candidate)->exists());
+
+        return $candidate;
+    }
+
+    private function generateInvoiceNumber(Pressing $pressing): string
+    {
+        $setting = $pressing->invoiceSetting;
+
+        if (! $setting || ($setting->invoice_reference_mode ?? 'random') !== 'custom' || empty($setting->invoice_reference_parts)) {
+            return 'FAC-'.strtoupper(uniqid());
+        }
+
+        $nextId = ((int) Invoice::max('id')) + 1;
+        $separator = in_array($setting->invoice_reference_separator, ['-', '/'], true) ? $setting->invoice_reference_separator : '-';
+        $date = now();
+
+        $map = [
+            'ID' => (string) $nextId,
+            'DATE' => $date->format('Ymd'),
+            'MOIS' => $date->format('m'),
+            'JOUR' => $date->format('d'),
+        ];
+
+        $parts = [];
+        foreach ((array) $setting->invoice_reference_parts as $part) {
+            $parts[] = $map[$part] ?? $part;
+        }
+
+        return implode($separator, $parts);
     }
 
     private function activePlan(int $pressingId): ?SubscriptionPlan

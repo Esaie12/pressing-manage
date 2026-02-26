@@ -8,7 +8,7 @@ class Pressing extends Model
 {
     protected $fillable = [
         'name', 'owner_id', 'phone', 'address',
-        'invoice_template', 'invoice_primary_color', 'invoice_welcome_message', 'invoice_logo_path', 'opening_time', 'closing_time',
+        'opening_time', 'closing_time',
         'allow_transaction_cancellation', 'transaction_cancellation_window_minutes',
         'module_cash_closure_enabled',
         'module_accounting_enabled',
@@ -43,6 +43,12 @@ class Pressing extends Model
     public function invoices()
     {
         return $this->hasMany(Invoice::class);
+    }
+
+
+    public function invoiceSetting()
+    {
+        return $this->hasOne(InvoiceSetting::class);
     }
 
     public function cashClosures()
