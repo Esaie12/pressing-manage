@@ -16,7 +16,7 @@
       <div class="col-12">
         <label class="form-label">Choix du modèle de facture</label>
         <div class="row g-3">
-          @php $selectedTemplate = old('invoice_template', $pressing->invoice_template ?? 'classic'); @endphp
+          @php $selectedTemplate = old('invoice_template', $invoiceSetting->invoice_template ?? 'classic'); @endphp
           @foreach(['classic' => 'Classique', 'modern' => 'Moderne', 'minimal' => 'Minimal'] as $key => $label)
             <div class="col-md-4">
               <label class="w-100" style="cursor:pointer">
@@ -39,11 +39,60 @@
 
 
       <div class="col-md-6"><label class="form-label">Logo du pressing (facture)</label><input type="file" class="form-control" name="invoice_logo" accept="image/*"></div>
-      <div class="col-md-6">@if($pressing->invoice_logo_path)<div class="small text-muted mb-2">Logo actuel</div><img src="{{ asset('storage/'.$pressing->invoice_logo_path) }}" alt="logo" style="height:60px;max-width:160px;object-fit:contain">@endif</div>
+      <div class="col-md-6">@if($invoiceSetting->invoice_logo_path)<div class="small text-muted mb-2">Logo actuel</div><img src="{{ asset('storage/'.$invoiceSetting->invoice_logo_path) }}" alt="logo" style="height:60px;max-width:160px;object-fit:contain">@endif</div>
 
-      <div class="col-md-4"><label class="form-label">Couleur principale</label><input type="color" class="form-control form-control-color" name="invoice_primary_color" value="{{ old('invoice_primary_color', $pressing->invoice_primary_color ?? '#0d6efd') }}"></div>
-      <div class="col-md-12"><label class="form-label">Message de bienvenue facture</label><input class="form-control" name="invoice_welcome_message" value="{{ old('invoice_welcome_message', $pressing->invoice_welcome_message) }}"></div>
+      <div class="col-md-4"><label class="form-label">Couleur principale</label><input type="color" class="form-control form-control-color" name="invoice_primary_color" value="{{ old('invoice_primary_color', $invoiceSetting->invoice_primary_color ?? '#0d6efd') }}"></div>
+      <div class="col-md-12"><label class="form-label">Message de bienvenue facture</label><input class="form-control" name="invoice_welcome_message" value="{{ old('invoice_welcome_message', $invoiceSetting->invoice_welcome_message) }}"></div>
 
+
+      @php
+        $referenceMode = old('invoice_reference_mode', $invoiceSetting->invoice_reference_mode ?? 'random');
+        $referenceSeparator = old('invoice_reference_separator', $invoiceSetting->invoice_reference_separator ?? '-');
+        $referenceParts = old('invoice_reference_parts', $invoiceSetting->invoice_reference_parts ?? ['ID', 'DATE', 'MOIS']);
+      @endphp
+
+      <div class="col-12"><hr class="my-1"></div>
+      <div class="col-12">
+        <h6 class="mb-2">Référence des factures</h6>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Mode de référence</label>
+        <select class="form-select" name="invoice_reference_mode" id="invoice_reference_mode">
+          <option value="random" @selected($referenceMode === 'random')>Aléatoire</option>
+          <option value="custom" @selected($referenceMode === 'custom')>Personnalisé</option>
+        </select>
+      </div>
+      <div class="col-md-4 reference-custom-fields">
+        <label class="form-label">Séparateur</label>
+        <div class="btn-group w-100" role="group">
+          <input type="radio" class="btn-check" name="invoice_reference_separator" id="sep_dash" value="-" @checked($referenceSeparator === '-')>
+          <label class="btn btn-outline-secondary" for="sep_dash">-</label>
+          <input type="radio" class="btn-check" name="invoice_reference_separator" id="sep_slash" value="/" @checked($referenceSeparator === '/')>
+          <label class="btn btn-outline-secondary" for="sep_slash">/</label>
+        </div>
+      </div>
+      <div class="col-md-12 reference-custom-fields">
+        <label class="form-label">Ordre des éléments</label>
+        <div class="d-flex flex-wrap gap-2 mb-2" id="referenceTokenButtons">
+          @foreach(['ID', 'DATE', 'MOIS', 'JOUR'] as $token)
+            <button type="button" class="btn btn-outline-primary reference-token-btn" data-token="{{ $token }}">{{ $token }}</button>
+          @endforeach
+        </div>
+
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+          <span class="small text-muted">Ordre sélectionné :</span>
+          <span class="badge text-bg-light border" id="referenceOrderPreview">{{ implode(($referenceSeparator ?? '-'), array_filter((array) $referenceParts)) }}</span>
+          <button type="button" class="btn btn-sm btn-outline-danger" id="referenceResetBtn">Réinitialiser</button>
+        </div>
+
+        <div id="referenceHiddenInputs">
+          @for($i = 0; $i < 3; $i++)
+            <input type="hidden" name="invoice_reference_parts[]" value="{{ $referenceParts[$i] ?? '' }}">
+          @endfor
+        </div>
+
+        <div class="form-text">Cliquez sur 3 boutons dans l'ordre voulu (ex: DATE puis ID puis MOIS).</div>
+      </div>
       <div class="col-12"><hr class="my-1"></div>
       <div class="col-12">
         <h6 class="mb-2">Annulation des transactions</h6>
@@ -83,6 +132,87 @@
     cancellationToggle.addEventListener('change', syncCancellationWindow);
     syncCancellationWindow();
   }
+
+
+  const referenceMode = document.getElementById('invoice_reference_mode');
+  const referenceCustomFields = document.querySelectorAll('.reference-custom-fields');
+  const syncReferenceMode = () => {
+    if (!referenceMode) return;
+    const isCustom = referenceMode.value === 'custom';
+    referenceCustomFields.forEach((el) => el.classList.toggle('d-none', !isCustom));
+  };
+  if (referenceMode) {
+    referenceMode.addEventListener('change', syncReferenceMode);
+    syncReferenceMode();
+  }
+
+  const tokenButtons = document.querySelectorAll('.reference-token-btn');
+  const hiddenInputsContainer = document.getElementById('referenceHiddenInputs');
+  const preview = document.getElementById('referenceOrderPreview');
+  const resetBtn = document.getElementById('referenceResetBtn');
+
+  const getHiddenInputs = () => hiddenInputsContainer ? Array.from(hiddenInputsContainer.querySelectorAll('input[name="invoice_reference_parts[]"]')) : [];
+  const getCurrentParts = () => getHiddenInputs().map((input) => input.value).filter(Boolean);
+
+  const setParts = (parts) => {
+    const inputs = getHiddenInputs();
+    for (let i = 0; i < 3; i++) {
+      if (inputs[i]) {
+        inputs[i].value = parts[i] || '';
+      }
+    }
+  };
+
+  const syncReferenceButtons = () => {
+    const parts = getCurrentParts();
+    tokenButtons.forEach((btn) => {
+      const token = btn.dataset.token;
+      const index = parts.indexOf(token);
+      btn.classList.remove('btn-primary');
+      btn.classList.add('btn-outline-primary');
+      if (index !== -1) {
+        btn.classList.remove('btn-outline-primary');
+        btn.classList.add('btn-primary');
+        btn.textContent = `${token} (${index + 1})`;
+      } else {
+        btn.textContent = token;
+      }
+    });
+
+    const sepChecked = document.querySelector('input[name="invoice_reference_separator"]:checked');
+    const sep = sepChecked ? sepChecked.value : '-';
+    preview.textContent = parts.length ? parts.join(sep) : '-';
+  };
+
+  tokenButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const token = btn.dataset.token;
+      const parts = getCurrentParts();
+      const existingIndex = parts.indexOf(token);
+
+      if (existingIndex !== -1) {
+        parts.splice(existingIndex, 1);
+      } else if (parts.length < 3) {
+        parts.push(token);
+      }
+
+      setParts(parts);
+      syncReferenceButtons();
+    });
+  });
+
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      setParts([]);
+      syncReferenceButtons();
+    });
+  }
+
+  document.querySelectorAll('input[name="invoice_reference_separator"]').forEach((input) => {
+    input.addEventListener('change', syncReferenceButtons);
+  });
+
+  syncReferenceButtons();
 
 </script>
 @endsection
