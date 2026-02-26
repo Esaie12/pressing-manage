@@ -339,7 +339,7 @@ class EmployeeUiController extends Controller
         abort_unless(Auth::user()->is_active, 403);
         abort_unless($invoice->pressing_id === Auth::user()->pressing_id, 403);
 
-        $invoice->load(['order.items.service', 'order.client', 'order.agency', 'pressing']);
+        $invoice->load(['order.items.service', 'order.client', 'order.agency', 'pressing.invoiceSetting']);
 
         return view('employee.invoice-show', ['invoice' => $invoice]);
     }

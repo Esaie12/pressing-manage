@@ -29,7 +29,7 @@
     $userNotifications = \App\Models\UserNotification::where('user_id', auth()->id())->latest()->limit(15)->get();
     $notifCount += \App\Models\UserNotification::where('user_id', auth()->id())->where('is_read', false)->count();
     $activePressing = in_array(auth()->user()->role, [\App\Models\User::ROLE_OWNER, \App\Models\User::ROLE_EMPLOYEE], true)
-        ? \App\Models\Pressing::find(auth()->user()->pressing_id)
+        ? \App\Models\Pressing::with('invoiceSetting')->find(auth()->user()->pressing_id)
         : null;
     $ownerPressing = auth()->user()->role === \App\Models\User::ROLE_OWNER
         ? $activePressing
@@ -39,7 +39,7 @@
         ? \App\Models\OwnerSubscription::where('pressing_id', $activePressing->id)->where('is_active', true)->whereDate('ends_at', '>=', now()->toDateString())->with('plan')->latest('ends_at')->first()
         : null;
 
-    $brandLabel = ($activePressing && $activeSubscription && empty($activePressing->invoice_logo_path))
+    $brandLabel = ($activePressing && $activeSubscription && empty($activePressing->invoiceSetting?->invoice_logo_path))
         ? $activePressing->name
         : 'Pressing Platform';
 @endphp
