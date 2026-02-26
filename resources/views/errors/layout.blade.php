@@ -4,19 +4,46 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>@yield('title', 'Erreur')</title>
-    @vite(['resources/css/app.css', 'resources/js/app.js'])
-</head>
-<body class="min-h-screen bg-slate-100 text-slate-800 antialiased">
-    <main class="mx-auto flex min-h-screen max-w-3xl items-center justify-center px-6 py-12">
-        <section class="w-full rounded-2xl bg-white p-8 shadow-xl ring-1 ring-slate-200 sm:p-12">
-            <p class="mb-2 text-sm font-semibold uppercase tracking-wide text-indigo-600">Erreur @yield('code')</p>
-            <h1 class="mb-4 text-3xl font-bold text-slate-900 sm:text-4xl">@yield('title')</h1>
-            <p class="mb-8 text-base leading-relaxed text-slate-600 sm:text-lg">@yield('message')</p>
 
-            <a href="{{ url('/login') }}" class="inline-flex items-center rounded-lg bg-indigo-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2">
-                Retour en arrière
-            </a>
-        </section>
-    </main>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body class="bg-light d-flex align-items-center justify-content-center vh-100">
+
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-8 col-lg-6">
+
+                <div class="card shadow-lg border-0 rounded-4">
+                    <div class="card-body p-5 text-center">
+
+                        <p class="text-uppercase text-primary fw-semibold mb-2">
+                            Erreur @yield('code')
+                        </p>
+
+                       <div class="d-flex justify-content-center">
+                            <h1 class="fw-bold mb-4">
+                                @yield('title')
+                            </h1>
+                       </div>
+
+                        <div class="d-flex  justify-content-cente">
+                            <p class="text-muted mb-4">
+                                @yield('message')
+                            </p>
+                        </div>
+
+                        <a href="{{ url('/login') }}" 
+                           class="btn btn-primary px-4 py-2 rounded-pill">
+                            Retour en arrière
+                        </a>
+
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>
