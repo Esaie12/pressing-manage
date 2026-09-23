@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   snyk-code:
+    name: Snyk Code Analysis
     runs-on: ubuntu-latest
 
     steps:
@@ -24,3 +25,4 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           command: code test
+          args: --org=ad7b5cdf-e07d-4ff8-ae7a-5cbad92c672a
