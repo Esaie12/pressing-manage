@@ -1,21 +1,28 @@
-name: Semgrep Analysis
+name: Semgrep Security Scan
 
 on:
   push:
-    branches: [ main, master, develop ]
+    branches:
+      - main
+      - develop
   pull_request:
-    branches: [ main, master, develop ]
+    branches:
+      - main
+      - develop
 
 jobs:
-  semgrep-scan:
-    name: Security Scan
+  semgrep:
+    name: Semgrep Laravel
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run Semgrep with local rules
-        run: |
-          pip install semgrep
-          semgrep scan --config=semgrep-laravel.yaml --error
+      - name: Run Semgrep
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: semgrep-laravel.yaml
