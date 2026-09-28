@@ -1,0 +1,263 @@
+rules:
+  # ============================================================
+  # DB::raw()
+  # ============================================================
+  - id: laravel-db-raw
+    languages:
+      - php
+    message: >
+      Attention : utilisation de DB::raw().
+      Vérifiez qu'aucune donnée utilisateur n'est concaténée/interpolée
+      dans cette expression. Préférez les query bindings lorsque possible.
+    severity: WARNING
+    patterns:
+      - pattern: DB::raw($EXPR)
+
+  - id: laravel-db-raw-concatenation
+    languages:
+      - php
+    message: >
+      DB::raw() utilise une concaténation de chaînes.
+      Risque potentiel d'injection SQL : utilisez des paramètres/bindings.
+    severity: ERROR
+    patterns:
+      - pattern: DB::raw($A . $B)
+
+  - id: laravel-db-raw-interpolation
+    languages:
+      - php
+    message: >
+      DB::raw() contient une interpolation de variable.
+      Vérifiez impérativement que la valeur n'est pas contrôlée par
+      l'utilisateur.
+    severity: ERROR
+    patterns:
+      - pattern: DB::raw("...{$VAR}...")
+      - pattern: DB::raw('...'.$VAR.'...')
+
+  # ============================================================
+  # Requêtes SQL dynamiques
+  # ============================================================
+  - id: laravel-raw-sql
+    languages:
+      - php
+    message: >
+      Utilisation d'une requête SQL brute.
+      Vérifiez que les données externes utilisent des bindings.
+    severity: WARNING
+    patterns:
+      - pattern: DB::select($QUERY)
+      - pattern: DB::statement($QUERY)
+      - pattern: DB::unprepared($QUERY)
+
+  - id: laravel-db-select-variable
+    languages:
+      - php
+    message: >
+      Requête SQL stockée dans une variable puis exécutée.
+      Vérifiez attentivement l'utilisation des bindings.
+    severity: WARNING
+    patterns:
+      - pattern: DB::select($QUERY)
+
+  # ============================================================
+  # Exécution de SQL non préparé
+  # ============================================================
+  - id: laravel-db-unprepared
+    languages:
+      - php
+    message: >
+      DB::unprepared() exécute du SQL sans préparation.
+      Évitez cette méthode avec des données dynamiques.
+    severity: ERROR
+    pattern: DB::unprepared($QUERY)
+
+  # ============================================================
+  # Debug oublié
+  # ============================================================
+  - id: laravel-debug-dd
+    languages:
+      - php
+    message: >
+      dd() détecté. Cette instruction interrompt l'exécution :
+      supprimez-la avant de merger en production.
+    severity: WARNING
+    pattern: dd(...)
+
+  - id: laravel-debug-dump
+    languages:
+      - php
+    message: >
+      dump() détecté. Vérifiez qu'il ne s'agit pas de code de debug oublié.
+    severity: INFO
+    pattern: dump(...)
+
+  - id: laravel-debug-ray
+    languages:
+      - php
+    message: >
+      ray() détecté. Vérifiez qu'il ne s'agit pas de code de debug oublié.
+    severity: INFO
+    pattern: ray(...)
+
+  # ============================================================
+  # Secrets / configuration
+  # ============================================================
+  - id: laravel-env-hardcoded-password
+    languages:
+      - php
+    message: >
+      Mot de passe potentiellement codé en dur.
+      Utilisez config(), env() ou un secret manager.
+    severity: ERROR
+    patterns:
+      - pattern-either:
+          - pattern: $PASSWORD = "..."
+          - pattern: $PASSWORD = '...'
+          - pattern: $SECRET = "..."
+          - pattern: $SECRET = '...'
+
+  # ============================================================
+  # Validation Laravel
+  # ============================================================
+  - id: laravel-request-input-without-validation
+    languages:
+      - php
+    message: >
+      Accès direct à une donnée de Request.
+      Vérifiez que cette donnée est validée avant utilisation.
+    severity: WARNING
+    patterns:
+      - pattern-either:
+          - pattern: $REQUEST->input(...)
+          - pattern: $REQUEST->get(...)
+          - pattern: $REQUEST->post(...)
+
+  # ============================================================
+  # Mass assignment
+  # ============================================================
+  - id: laravel-create-request-all
+    languages:
+      - php
+    message: >
+      Request::all() utilisé directement pour créer un modèle.
+      Risque de mass assignment. Préférez validated() ou un tableau
+      explicitement défini.
+    severity: ERROR
+    patterns:
+      - pattern: $MODEL::create($REQUEST->all())
+
+  - id: laravel-model-fill-request-all
+    languages:
+      - php
+    message: >
+      Request::all() utilisé avec fill().
+      Vérifiez le risque de mass assignment.
+    severity: ERROR
+    patterns:
+      - pattern: $MODEL->fill($REQUEST->all())
+
+  # ============================================================
+  # Eloquent : requêtes dangereuses
+  # ============================================================
+  - id: laravel-where-raw
+    languages:
+      - php
+    message: >
+      whereRaw() détecté.
+      Vérifiez qu'aucune donnée utilisateur n'est concaténée dans la requête.
+    severity: WARNING
+    pattern: $MODEL->whereRaw($QUERY)
+
+  - id: laravel-order-by-raw
+    languages:
+      - php
+    message: >
+      orderByRaw() détecté.
+      Vérifiez que la colonne ou l'expression ne provient pas directement
+      de l'utilisateur.
+    severity: WARNING
+    pattern: $MODEL->orderByRaw($QUERY)
+
+  - id: laravel-select-raw
+    languages:
+      - php
+    message: >
+      selectRaw() détecté.
+      Vérifiez l'utilisation des bindings.
+    severity: WARNING
+    pattern: $MODEL->selectRaw($QUERY)
+
+  - id: laravel-having-raw
+    languages:
+      - php
+    message: >
+      havingRaw() détecté.
+      Vérifiez l'utilisation des bindings.
+    severity: WARNING
+    pattern: $MODEL->havingRaw($QUERY)
+
+  # ============================================================
+  # SQL avec concaténation
+  # ============================================================
+  - id: laravel-query-concatenation
+    languages:
+      - php
+    message: >
+      Une chaîne SQL semble être construite par concaténation.
+      Utilisez les bindings Laravel.
+    severity: ERROR
+    patterns:
+      - pattern-either:
+          - pattern: DB::select($A . $B)
+          - pattern: DB::statement($A . $B)
+          - pattern: DB::raw($A . $B)
+          - pattern: $MODEL->whereRaw($A . $B)
+          - pattern: $MODEL->orderByRaw($A . $B)
+
+  # ============================================================
+  # Transactions
+  # ============================================================
+  - id: laravel-manual-transaction
+    languages:
+      - php
+    message: >
+      Transaction manuelle détectée.
+      Préférez DB::transaction() lorsque cela est possible afin de
+      garantir automatiquement le rollback en cas d'exception.
+    severity: INFO
+    patterns:
+      - pattern: DB::beginTransaction()
+
+  # ============================================================
+  # Connexions DB
+  # ============================================================
+  - id: laravel-db-connection
+    languages:
+      - php
+    message: >
+      Connexion DB explicite détectée.
+      Vérifiez que la connexion est correctement gérée et libérée
+      lorsque cela est nécessaire.
+    severity: INFO
+    pattern: DB::connection(...)
+
+  # ============================================================
+  # Commentaires / TODO
+  # ============================================================
+  - id: laravel-todo
+    languages:
+      - generic
+    message: >
+      TODO détecté. Vérifiez qu'il correspond toujours à une tâche
+      nécessaire avant mise en production.
+    severity: INFO
+    pattern-regex: '\bTODO\b'
+
+  - id: laravel-fixme
+    languages:
+      - generic
+    message: >
+      FIXME détecté. Ce code nécessite probablement une correction.
+    severity: WARNING
+    pattern-regex: '\bFIXME\b'
